@@ -1,0 +1,29 @@
+name = "kremchympe-backend"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# ----- D1 database binding -----
+# Create with: wrangler d1 create kremchympe-db
+# then paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "kremchympe-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# ----- R2 bucket for receipt uploads -----
+# Create with: wrangler r2 bucket create kremchympe-receipts
+[[r2_buckets]]
+binding = "RECEIPTS"
+bucket_name = "kremchympe-receipts"
+
+# ----- Secrets (set these with `wrangler secret put NAME`, never commit them) -----
+# TELEGRAM_BOT_TOKEN        - Admin/guide bot token from @BotFather
+# TELEGRAM_WEBHOOK_SECRET   - random string, used to verify Telegram's webhook calls
+# SUPERADMIN_CHAT_ID        - your personal Telegram chat id (bootstraps admin_users)
+# RAZORPAY_KEY_ID           - set via bot once configured (mirrored here as fallback)
+# RAZORPAY_KEY_SECRET       - set via bot once configured, NEVER stored in D1
+# RAZORPAY_WEBHOOK_SECRET   - set via bot once configured, NEVER stored in D1
+# CF_API_TOKEN              - Cloudflare API token with "Edit Worker Secrets" permission,
+#                             used so the bot can write new secrets on your behalf
+# CF_ACCOUNT_ID             - your Cloudflare account id
+# CF_WORKER_NAME            - "kremchympe-backend" (must match `name` above)
