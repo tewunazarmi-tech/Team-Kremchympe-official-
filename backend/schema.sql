@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   razorpay_order_id TEXT,
   razorpay_payment_id TEXT,
   amount_paid_total REAL NOT NULL DEFAULT 0, -- sum of all captured payments (supports advance + later top-ups)
-  receipt_file_id TEXT,        -- R2 object key (manual-mode payment proof upload)
+  receipt_file_id TEXT,        -- Telegram file_id (manual-mode payment proof, stored via the bot)
   guide_id INTEGER REFERENCES guides(id),
   idempotency_key TEXT UNIQUE, -- prevents duplicate submissions from double-clicks/retries
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

@@ -87,16 +87,14 @@ payment page.
    wrangler d1 execute kremchympe-db --file=./schema.sql
    wrangler d1 execute kremchympe-db --file=./seed.sql
    ```
-4. **Create the R2 bucket for receipts:**
-   ```
-   wrangler r2 bucket create kremchympe-receipts
-   ```
-5. **Create a Telegram bot** via [@BotFather](https://t.me/BotFather) and get
-   the bot token.
-6. **Create a Cloudflare API token** (My Profile → API Tokens) with
+4. **Create a Telegram bot** via [@BotFather](https://t.me/BotFather) and get
+   the bot token. (No R2/storage bucket is needed — receipt uploads are
+   forwarded directly into the admin's Telegram chat and Telegram hosts the
+   file; only its `file_id` is kept in D1.)
+5. **Create a Cloudflare API token** (My Profile → API Tokens) with
    "Edit Cloudflare Workers" permission — this lets the bot write new
    Razorpay secrets on your behalf when you configure them via Telegram.
-7. **Set secrets** (never put these in `wrangler.toml` or commit them):
+6. **Set secrets** (never put these in `wrangler.toml` or commit them):
    ```
    wrangler secret put TELEGRAM_BOT_TOKEN
    wrangler secret put TELEGRAM_WEBHOOK_SECRET   # any random string you invent
@@ -106,27 +104,28 @@ payment page.
    wrangler secret put CF_WORKER_NAME            # kremchympe-backend
    ```
    (Get your chat id by messaging [@userinfobot](https://t.me/userinfobot).)
-8. **Deploy:**
+7. **Deploy:**
    ```
    wrangler deploy
    ```
-9. **Register the Telegram webhook** (replace values):
+8. **Register the Telegram webhook** (replace values):
    ```
    curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<your-worker>.workers.dev/webhook/telegram&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
    ```
-10. **Message your bot** with `/start` from the SUPERADMIN_CHAT_ID account —
+9. **Message your bot** with `/start` from the SUPERADMIN_CHAT_ID account —
     this bootstraps you as the first admin and opens the main menu.
-11. **At this point you're already live in manual mode** — visitors can book
-    using the existing UPI/QR/bank instructions and admins get receipts to
-    confirm/reject. No further setup is required to accept bookings.
-12. **To switch on gateway mode**, from the bot: 💳 Payments → 🔑 Configure
+10. **At this point you're already live in manual mode** — visitors can book
+    using the existing UPI/QR/bank instructions, upload a receipt, and it
+    lands directly in your Telegram chat with Confirm/Reject buttons. No
+    further setup is required to accept bookings.
+11. **To switch on gateway mode**, from the bot: 💳 Payments → 🔑 Configure
     Razorpay, then paste your Key ID, Key Secret, and Webhook Secret when
     prompted. The bot tests them live against Razorpay before saving —
     if they're valid, the site switches to gateway mode immediately.
-13. **Add the Razorpay webhook** in the Razorpay dashboard pointing to:
+12. **Add the Razorpay webhook** in the Razorpay dashboard pointing to:
     `https://<your-worker>.workers.dev/webhook/razorpay`
     (events: `payment.captured`, `payment.failed`)
-14. **Enable the cron trigger** for reminders — add to `wrangler.toml`:
+13. **Enable the cron trigger** for reminders — add to `wrangler.toml`:
     ```
     [triggers]
     crons = ["0 * * * *"]
