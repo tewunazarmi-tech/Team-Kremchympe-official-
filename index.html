@@ -429,6 +429,28 @@
 
       <!-- ===== MANUAL MODE (shown when no gateway is configured/verified, or as an automatic fallback) ===== -->
       <div id="manualPaymentSection" style="display:none;">
+        <div class="card highlight-card" data-admin-protected="true">
+          <span class="highlight-badge">&#9888; Please don't skip this</span>
+          <h3>Amount to pay now &ndash; minimum advance &#8377;500</h3>
+          <p class="note">You can pay the full amount now, or a partial advance (minimum &#8377;500) to secure your booking. Any remaining balance can be settled later.</p>
+          <div class="paid-input-wrap">
+            <label class="field-label">Amount to pay now (&#8377;)</label>
+            <input type="number" id="manualAdvanceAmount" min="500" step="1" value="0" placeholder="Minimum &#8377;500">
+          </div>
+          <div class="due-line total">
+            <span>Total Booking Amount</span>
+            <span class="due-value" id="manualDueTotalLine">&#8377;0</span>
+          </div>
+          <div class="due-line">
+            <span>Paying Now</span>
+            <span class="due-value" id="manualDuePaidLine">&#8377;0</span>
+          </div>
+          <div class="due-line total">
+            <span>Amount Due After This Payment</span>
+            <span class="due-value" id="manualDueRemainingLine">&#8377;0</span>
+          </div>
+        </div>
+
         <div class="card payment-mode-select">
           <h3>Payment method</h3>
           <label class="radio-row"><input type="radio" name="paymentMode" value="upi" checked> UPI ID</label>
@@ -485,7 +507,7 @@
         <div class="card highlight-card" data-admin-protected="true">
           <span class="highlight-badge">&#9888; Please don't skip this</span>
           <h3>Upload your payment receipt</h3>
-          <p class="note">Pay the full amount using the details above, then upload a screenshot/photo of your payment confirmation. Your booking will be marked <b>pending</b> until our team verifies it &mdash; you'll be contacted to confirm.</p>
+          <p class="note">Pay the amount you entered above using the details shown, then upload a screenshot/photo of your payment confirmation. Your booking will be marked <b>pending</b> until our team verifies it &mdash; you'll be contacted to confirm.</p>
           <input type="file" id="receiptFile" accept="image/*,.pdf" style="margin-top:8px;">
           <p class="note" id="manualStatusNote" style="display:none;"></p>
         </div>
@@ -515,7 +537,7 @@
 <script>
 // ===== Backend integration config =====
 // Replace with your deployed Cloudflare Worker URL (see backend/README.md).
-const BACKEND_URL = "https://kremchympe-backend.senlysuchiang87.workers.dev";
+const BACKEND_URL = "https://YOUR-WORKER-SUBDOMAIN.workers.dev";
 const PACKAGE_ID = 1;
 const MIN_ADVANCE = 500;
 // Must match the order services were inserted in backend/seed.sql on a fresh DB.
@@ -628,6 +650,7 @@ document.querySelectorAll('input[name="camping"]').forEach(r=>{
 });
 document.getElementById('numPersons').addEventListener('input', recalc);
 document.getElementById('advanceAmount').addEventListener('input', recalc);
+document.getElementById('manualAdvanceAmount').addEventListener('input', recalc);
 
 function isCampingYes(){
   const el = document.querySelector('input[name="camping"]:checked');
@@ -675,17 +698,30 @@ function recalc(){
     `<div class="breakdown-row" style="font-weight:700;border-top:1px solid #E7E1F7;margin-top:6px;padding-top:6px;"><span>Total</span><span>${fmt(total)}</span></div>`;
 
   window.grandTotal = total;
-  document.getElementById('upiAmountValue').textContent = fmt(total);
-  document.getElementById('bankAmountValue').textContent = fmt(total);
 
-  const paid = Math.max(0, parseFloat(document.getElementById('advanceAmount')?.value) || 0);
+  // Which advance-amount field is "live" depends on which payment section
+  // (Razorpay gateway vs. manual UPI/QR/Bank) is currently shown.
+  const gatewaySection = document.getElementById('gatewayPaymentSection');
+  const gatewayVisible = gatewaySection && gatewaySection.style.display !== 'none';
+  const activeAdvanceEl = document.getElementById(gatewayVisible ? 'advanceAmount' : 'manualAdvanceAmount');
+
+  const paid = Math.max(0, parseFloat(activeAdvanceEl?.value) || 0);
   const due = total - paid;
+
+  document.getElementById('upiAmountValue').textContent = fmt(paid || total);
+  document.getElementById('bankAmountValue').textContent = fmt(paid || total);
 
   document.getElementById('dueTotalLine').textContent = fmt(total);
   document.getElementById('duePaidLine').textContent = fmt(paid);
   const dueEl = document.getElementById('dueRemainingLine');
   dueEl.textContent = fmt(Math.max(due,0)) + (due < 0 ? ' (overpaid)' : '');
   dueEl.className = 'due-value ' + (due > 0 ? 'positive' : 'settled');
+
+  document.getElementById('manualDueTotalLine').textContent = fmt(total);
+  document.getElementById('manualDuePaidLine').textContent = fmt(paid);
+  const manualDueEl = document.getElementById('manualDueRemainingLine');
+  manualDueEl.textContent = fmt(Math.max(due,0)) + (due < 0 ? ' (overpaid)' : '');
+  manualDueEl.className = 'due-value ' + (due > 0 ? 'positive' : 'settled');
 
   window.lastLines = lines;
   window.lastTotal = total;
@@ -713,9 +749,13 @@ function goToStep(n){
   document.getElementById('heroCard').style.display = (n === 4) ? 'none' : '';
   if(n===3){
     const adv = document.getElementById('advanceAmount');
+    const manualAdv = document.getElementById('manualAdvanceAmount');
     const total = computeBreakdown().total;
     if(!adv.value || parseFloat(adv.value) <= 0){
       adv.value = Math.round(total);
+    }
+    if(!manualAdv.value || parseFloat(manualAdv.value) <= 0){
+      manualAdv.value = Math.round(total);
     }
     applyPaymentMode();
   }
@@ -767,6 +807,7 @@ async function applyPaymentMode(){
     loadingNote.style.display = 'none';
     manualSection.style.display = '';
     window.currentPaymentMode = 'manual';
+    recalc();
     return;
   }
 
@@ -786,12 +827,25 @@ async function applyPaymentMode(){
     loadingNote.style.display = 'none';
     manualSection.style.display = '';
   }
+  recalc();
 }
 
 async function submitManualBooking(){
   const manualBtn = document.getElementById('manualSubmitBtn');
   const statusNote = document.getElementById('manualStatusNote');
   const fileInput = document.getElementById('receiptFile');
+
+  const total = computeBreakdown().total;
+  const manualAdv = document.getElementById('manualAdvanceAmount');
+  const manualAmountToPay = Math.round(parseFloat(manualAdv.value) || 0);
+  if(manualAmountToPay < MIN_ADVANCE){
+    alert(`Please enter at least \u20B9${MIN_ADVANCE} to secure your booking.`);
+    return;
+  }
+  if(manualAmountToPay > total){
+    alert('The amount to pay now cannot be more than the total booking amount.');
+    return;
+  }
 
   // If a booking hasn't already been created for this visitor (e.g. a
   // gateway attempt that silently fell back to manual), create one now.
@@ -1140,6 +1194,7 @@ function resetForm(){
   document.getElementById('campingYesBlock').style.display = '';
   document.getElementById('campingNoBlock').style.display = 'none';
   document.getElementById('advanceAmount').value = 0;
+  document.getElementById('manualAdvanceAmount').value = 0;
   document.getElementById('receiptFile').value = '';
   document.getElementById('manualStatusNote').style.display = 'none';
   window.currentBookingId = null;
