@@ -4,7 +4,7 @@ import {
 } from './db.js';
 import { computeFinalAmount, generateBookingCode, confirmBookingAndAssign } from './booking.js';
 import { createRazorpayOrder, verifyCheckoutSignature, verifyWebhookSignature } from './razorpay.js';
-import { verifyTelegramWebhook, sendMessage, sendPhotoToChat, inlineKeyboard } from './telegram.js';
+import { verifyTelegramWebhook, sendMessage, sendPhotoToChat, sendPhotoMultipart, sendDocumentMultipart, sendDocumentById, inlineKeyboard } from './telegram.js';
 import { classifySender } from './auth.js';
 import { handleAdminMessage, handleAdminCallback } from './bot/admin.js';
 import { handleGuideOrUnknownMessage, handleGuideCallback } from './bot/guide.js';
@@ -64,7 +64,7 @@ export default {
       // ---- Booking creation. Backend decides manual vs gateway, not the caller. ----
       if (url.pathname === '/api/booking' && request.method === 'POST') {
         const body = await request.json();
-        return await handleCreateBooking(env, body, url.origin);
+        return await handleCreateBooking(env, body);
       }
 
       // ---- Post-checkout signature confirmation from the browser (hint only) ----
@@ -80,14 +80,10 @@ export default {
         return json({ ok: true, note: 'awaiting_webhook_confirmation' });
       }
 
-      // ---- Receipt upload (manual-mode bookings only) ----
+      // ---- Receipt upload (manual-mode bookings only) — forwarded straight
+      // into Telegram, which is the receipt storage; no bucket involved. ----
       if (url.pathname === '/api/receipt' && request.method === 'POST') {
-        return await handleReceiptUpload(env, request, url.origin);
-      }
-
-      // ---- Serves an uploaded receipt so it can be shown inline in Telegram ----
-      if (url.pathname === '/api/receipt/view' && request.method === 'GET') {
-        return await handleReceiptView(env, url);
+        return await handleReceiptUpload(env, request);
       }
 
       // ---- Razorpay webhook (source of truth for payment status) ----
@@ -122,7 +118,7 @@ export default {
   },
 };
 
-async function handleCreateBooking(env, body, origin) {
+async function handleCreateBooking(env, body) {
   const { name, phone, email, packageId, participants, visitDate, selectedServices, discountId, idempotencyKey, amountToPay } = body;
 
   if (!name || !phone || !packageId || !visitDate) {
@@ -192,36 +188,16 @@ async function handleCreateBooking(env, body, origin) {
   }
 }
 
-async function handleReceiptUpload(env, request, origin) {
+async function handleReceiptUpload(env, request) {
   const form = await request.formData();
   const bookingId = form.get('bookingId');
   const file = form.get('file');
   if (!bookingId || !file) return json({ error: 'missing_fields' }, 400);
 
-  const key = `receipts/${bookingId}-${Date.now()}`;
-  await env.RECEIPTS.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-  await updateBookingStatus(env.DB, bookingId, { receiptFileId: key, paymentStatus: 'awaiting_verification' });
-
   const booking = await env.DB.prepare('SELECT * FROM bookings WHERE id = ?').bind(bookingId).first();
+  if (!booking) return json({ error: 'booking_not_found' }, 404);
   const visitor = await env.DB.prepare('SELECT * FROM visitors WHERE id = ?').bind(booking.visitor_id).first();
 
-  await notifyAdminsOfManualBooking(env, booking, visitor, origin);
-
-  return json({ ok: true });
-}
-
-async function handleReceiptView(env, url) {
-  const bookingId = url.searchParams.get('bookingId');
-  const booking = await env.DB.prepare('SELECT * FROM bookings WHERE id = ?').bind(bookingId).first();
-  if (!booking || !booking.receipt_file_id) return json({ error: 'not_found' }, 404);
-  const obj = await env.RECEIPTS.get(booking.receipt_file_id);
-  if (!obj) return json({ error: 'not_found' }, 404);
-  return new Response(obj.body, { headers: { 'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream' } });
-}
-
-// Sent when a MANUAL-mode booking has a receipt awaiting a human decision.
-// Includes Confirm/Reject buttons — no gateway involved, so a person must decide.
-async function notifyAdminsOfManualBooking(env, booking, visitor, origin) {
   const admins = (await env.DB.prepare('SELECT telegram_chat_id FROM admin_users').all()).results;
   const caption =
     `📩 <b>New booking (manual payment)</b> ${booking.booking_code}\n` +
@@ -232,15 +208,37 @@ async function notifyAdminsOfManualBooking(env, booking, visitor, origin) {
   const keyboard = inlineKeyboard([
     [{ text: '✅ Confirm Payment', callback_data: `bk:confirm:${booking.id}` }, { text: '❌ Reject', callback_data: `bk:reject:${booking.id}` }],
   ]);
-  const receiptUrl = booking.receipt_file_id ? `${origin}/api/receipt/view?bookingId=${booking.id}` : null;
 
-  for (const a of admins) {
-    if (receiptUrl) {
-      await sendPhotoToChat(env, a.telegram_chat_id, receiptUrl, caption, { keyboard });
-    } else {
-      await sendMessage(env, a.telegram_chat_id, caption, { keyboard });
+  const isImage = (file.type || '').startsWith('image/');
+  const filename = file.name || (isImage ? 'receipt.jpg' : 'receipt.pdf');
+
+  // Telegram is the storage: upload the actual bytes to the FIRST admin,
+  // then reuse the file_id Telegram hands back for any additional admins —
+  // that's an instant re-send with no re-upload, and the file_id itself is
+  // what we keep in D1 as the permanent reference to this receipt.
+  let fileId = null;
+  for (let i = 0; i < admins.length; i++) {
+    const chatId = admins[i].telegram_chat_id;
+    if (fileId) {
+      if (isImage) await sendPhotoToChat(env, chatId, fileId, caption, { keyboard });
+      else await sendDocumentById(env, chatId, fileId, caption, { keyboard });
+      continue;
+    }
+    const result = isImage
+      ? await sendPhotoMultipart(env, chatId, file, filename, caption, { keyboard })
+      : await sendDocumentMultipart(env, chatId, file, filename, caption, { keyboard });
+    if (result.ok) {
+      fileId = isImage ? result.result.photo?.slice(-1)[0]?.file_id : result.result.document?.file_id;
     }
   }
+
+  if (admins.length === 0) {
+    console.error(`No admin configured to receive receipt for booking ${booking.id}`);
+  }
+
+  await updateBookingStatus(env.DB, bookingId, { receiptFileId: fileId, paymentStatus: 'awaiting_verification' });
+
+  return json({ ok: true });
 }
 
 // Sent for a GATEWAY-mode booking that's already been auto-confirmed —
