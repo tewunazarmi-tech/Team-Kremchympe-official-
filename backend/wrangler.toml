@@ -8,7 +8,7 @@ compatibility_date = "2026-08-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "kremchympe-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "916e80a6-4481-43e2-af01-72ccfc6ba575"
 
 # No R2 bucket needed — receipt uploads are forwarded directly to Telegram
 # (the admin's chat) via the Bot API, and Telegram's returned file_id is
