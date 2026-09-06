@@ -284,15 +284,17 @@
 
       <div class="card">
         <h3>Lunch &ndash; &#8377;300 per person</h3>
-        <p class="note"><em>Note: If you pack your lunch, you can have it after the adventure and before visiting Chympe Falls.</em></p>
+        <p class="note"><em>Note: If you pack your own lunch, you can have it after the adventure and before visiting Chympe Falls.</em></p>
 
-        <div class="choice-row" id="lunchPackToggle">
-          <div class="choice-label">Packing your lunch?</div>
-          <div class="choice-value" id="lunchChoiceValue">No <span class="chev">&#9660;</span></div>
-        </div>
-        <div class="choice-body" id="lunchPackBody">
-          <label class="radio-row"><input type="radio" name="lunchPack" value="no" checked> No, Ill have it here</label>
-          <label class="radio-row"><input type="radio" name="lunchPack" value="yes"> Yes, I would like to pack it</label>
+        <div id="lunchPackSection" style="display:none;">
+          <div class="choice-row" id="lunchPackToggle">
+            <div class="choice-label">Packing your own lunch?</div>
+            <div class="choice-value" id="lunchChoiceValue">No <span class="chev">&#9660;</span></div>
+          </div>
+          <div class="choice-body" id="lunchPackBody">
+            <label class="radio-row"><input type="radio" name="lunchPack" value="no" checked> No, I'll have it here</label>
+            <label class="radio-row"><input type="radio" name="lunchPack" value="yes"> Yes, I would like to pack it</label>
+          </div>
         </div>
 
         <p class="note" id="lunchPackedNote" style="display:none;margin-top:12px;">You're all set &ndash; enjoy your packed lunch after the adventure, before visiting Chympe Falls.</p>
@@ -747,22 +749,30 @@ document.addEventListener('click', function(e){
   else counters[target] = Math.max(0, counters[target]-1);
   document.getElementById(target+'_qty').textContent = counters[target];
   document.getElementById(target+'_sub').textContent = fmt(counters[target]*priceOf(target));
+  if(['lunchVeg','lunchChicken','lunchPork'].includes(target)) updateLunchPackVisibility();
   recalc();
 });
 
+// The "packing your own lunch?" question only makes sense once the visitor
+// has actually picked something from the Lunch menu — keep it hidden until
+// then, and hide it again (resetting the choice) if everything is deselected.
+function updateLunchPackVisibility(){
+  const anySelected = counters.lunchVeg > 0 || counters.lunchChicken > 0 || counters.lunchPork > 0;
+  const section = document.getElementById('lunchPackSection');
+  if(anySelected){
+    section.style.display = '';
+  } else {
+    section.style.display = 'none';
+    const noOption = document.querySelector('input[name="lunchPack"][value="no"]');
+    if(noOption) noOption.checked = true;
+    applyLunchPackChoice();
+  }
+}
+
 function applyLunchPackChoice(){
   const packing = document.querySelector('input[name="lunchPack"]:checked').value === 'yes';
-  document.getElementById('lunchThaliBlock').style.display = packing ? 'none' : '';
   document.getElementById('lunchPackedNote').style.display = packing ? '' : 'none';
   document.getElementById('lunchChoiceValue').innerHTML = (packing ? 'Yes' : 'No') + ' <span class="chev">&#9660;</span>';
-  if(packing){
-    ['lunchVeg','lunchChicken','lunchPork'].forEach(k=>{
-      counters[k] = 0;
-      document.getElementById(k+'_qty').textContent = 0;
-      document.getElementById(k+'_sub').textContent = fmt(0);
-    });
-  }
-  recalc();
 }
 document.querySelectorAll('input[name="lunchPack"]').forEach(r=>r.addEventListener('change', applyLunchPackChoice));
 document.getElementById('lunchPackToggle').addEventListener('click', function(){
