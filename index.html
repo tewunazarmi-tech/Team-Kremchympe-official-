@@ -108,6 +108,23 @@
   .card.no-top-radius{border-radius:0 0 var(--radius) var(--radius);margin-top:-16px;}
   .thali-card{border:1px solid #E7E1F7;border-radius:10px;padding:12px 14px;margin-bottom:10px;}
   .thali-card .counter-row{padding:8px 0 0;border:none;}
+  .choice-row{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;
+    border:1px solid #E7E1F7;border-radius:10px;padding:12px 14px;margin-bottom:14px;background:var(--purple-light);
+  }
+  .choice-row .choice-label{font-size:14.5px;font-weight:500;}
+  .choice-row .choice-value{font-size:13.5px;color:var(--purple-dark);display:flex;align-items:center;gap:2px;white-space:nowrap;}
+  .choice-row .chev{color:var(--purple);font-size:17px;}
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(38,32,59,0.5);
+    align-items:center;justify-content:center;z-index:1000;padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal-card{
+    background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:22px;max-width:420px;width:100%;
+  }
+  .modal-card h3{margin:0 0 4px;font-size:17px;font-weight:600;}
   .pay-detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F0ECFA;}
   .pay-detail-row:last-child{border-bottom:none;}
   .pay-detail-value{font-family:'Courier New',monospace;font-size:15px;font-weight:600;word-break:break-all;}
@@ -274,44 +291,68 @@
 
       <div class="card">
         <h3>Lunch &ndash; &#8377;300 per person</h3>
-        <p class="note">Select your thali(s) and choose the quantity for each.</p>
 
-        <div class="thali-card">
-          <div class="counter-item-name">Veg Thali <span class="counter-item-price">&#8377;300 each</span></div>
-          <div class="counter-row">
-            <div></div>
-            <div class="counter-controls">
-              <div class="counter-btn" data-action="dec" data-target="lunchVeg">&minus;</div>
-              <div class="counter-qty" id="lunchVeg_qty">0</div>
-              <div class="counter-btn" data-action="inc" data-target="lunchVeg">+</div>
-            </div>
-            <div class="counter-subtotal" id="lunchVeg_sub">&#8377;0</div>
-          </div>
+        <div class="choice-row" id="lunchChoiceRow" onclick="openLunchModal()">
+          <div class="choice-label">Packing your own lunch?</div>
+          <div class="choice-value" id="lunchChoiceValue">No &ndash; order thali below <span class="chev">&#8250;</span></div>
         </div>
 
-        <div class="thali-card">
-          <div class="counter-item-name">Chicken Thali <span class="counter-item-price">&#8377;300 each</span></div>
-          <div class="counter-row">
-            <div></div>
-            <div class="counter-controls">
-              <div class="counter-btn" data-action="dec" data-target="lunchChicken">&minus;</div>
-              <div class="counter-qty" id="lunchChicken_qty">0</div>
-              <div class="counter-btn" data-action="inc" data-target="lunchChicken">+</div>
+        <p class="note" id="lunchPackedNote" style="display:none;">You're all set &ndash; enjoy your packed lunch after the adventure, before visiting Chympe Falls.</p>
+
+        <div id="lunchThaliBlock">
+          <p class="note">Select your thali(s) and choose the quantity for each.</p>
+
+          <div class="thali-card">
+            <div class="counter-item-name">Veg Thali <span class="counter-item-price">&#8377;300 each</span></div>
+            <div class="counter-row">
+              <div></div>
+              <div class="counter-controls">
+                <div class="counter-btn" data-action="dec" data-target="lunchVeg">&minus;</div>
+                <div class="counter-qty" id="lunchVeg_qty">0</div>
+                <div class="counter-btn" data-action="inc" data-target="lunchVeg">+</div>
+              </div>
+              <div class="counter-subtotal" id="lunchVeg_sub">&#8377;0</div>
             </div>
-            <div class="counter-subtotal" id="lunchChicken_sub">&#8377;0</div>
+          </div>
+
+          <div class="thali-card">
+            <div class="counter-item-name">Chicken Thali <span class="counter-item-price">&#8377;300 each</span></div>
+            <div class="counter-row">
+              <div></div>
+              <div class="counter-controls">
+                <div class="counter-btn" data-action="dec" data-target="lunchChicken">&minus;</div>
+                <div class="counter-qty" id="lunchChicken_qty">0</div>
+                <div class="counter-btn" data-action="inc" data-target="lunchChicken">+</div>
+              </div>
+              <div class="counter-subtotal" id="lunchChicken_sub">&#8377;0</div>
+            </div>
+          </div>
+
+          <div class="thali-card">
+            <div class="counter-item-name">Pork Thali <span class="counter-item-price">&#8377;300 each</span></div>
+            <div class="counter-row">
+              <div></div>
+              <div class="counter-controls">
+                <div class="counter-btn" data-action="dec" data-target="lunchPork">&minus;</div>
+                <div class="counter-qty" id="lunchPork_qty">0</div>
+                <div class="counter-btn" data-action="inc" data-target="lunchPork">+</div>
+              </div>
+              <div class="counter-subtotal" id="lunchPork_sub">&#8377;0</div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div class="thali-card">
-          <div class="counter-item-name">Pork Thali <span class="counter-item-price">&#8377;300 each</span></div>
-          <div class="counter-row">
+      <!-- Lunch pack yes/no popup -->
+      <div class="modal-overlay" id="lunchModalOverlay">
+        <div class="modal-card">
+          <h3>Packing your own lunch?</h3>
+          <p class="note"><em>Note: If you pack your own lunch, you can have it after the adventure and before visiting Chympe Falls.</em></p>
+          <label class="radio-row"><input type="radio" name="lunchPack" value="yes"> Yes, I'll bring my own</label>
+          <label class="radio-row"><input type="radio" name="lunchPack" value="no" checked> No, I'd like to order a thali</label>
+          <div class="btn-row" style="margin-top:14px;">
             <div></div>
-            <div class="counter-controls">
-              <div class="counter-btn" data-action="dec" data-target="lunchPork">&minus;</div>
-              <div class="counter-qty" id="lunchPork_qty">0</div>
-              <div class="counter-btn" data-action="inc" data-target="lunchPork">+</div>
-            </div>
-            <div class="counter-subtotal" id="lunchPork_sub">&#8377;0</div>
+            <button type="button" class="btn btn-primary" onclick="closeLunchModal()">Done</button>
           </div>
         </div>
       </div>
@@ -544,7 +585,7 @@
 // ===== Backend integration config =====
 // Replace with your deployed Cloudflare Worker URL (see backend/README.md).
 const BACKEND_URL = "https://kremchympe-backend.senlysuchiang87.workers.dev";
-const PACKAGE_ID = 1;
+let PACKAGE_ID = 1;
 const MIN_ADVANCE = 500;
 // Must match the order services were inserted in backend/seed.sql on a fresh DB.
 // If you re-seed or add services later, check the real ids with:
@@ -586,6 +627,95 @@ let counters = { lunchVeg:0, lunchChicken:0, lunchPork:0, tent:0 };
 PRICES.bamboo.forEach(item => counters['bamboo_'+item.id] = 0);
 
 function fmt(n){ return '\u20B9' + Math.round(n).toLocaleString('en-IN'); }
+
+// ===== Live catalog sync =====
+// The IDs above are only a fallback for a freshly-seeded DB. Booking creation
+// fails server-side (with the generic "Something went wrong creating your
+// booking" alert) whenever a serviceId/packageId sent by the browser doesn't
+// match a real, active row in D1 — which silently happens if the DB is ever
+// re-seeded, a service is re-ordered, or a new package is added. To make this
+// stop happening for good, we fetch the real ids/prices from the backend's
+// own /api/packages endpoint on load and use those instead of the guesses.
+let catalogReadyResolve;
+const catalogReady = new Promise((res) => { catalogReadyResolve = res; });
+
+const SERVICE_NAME_MAP = {
+  guide: 'Local Guide (mandatory)',
+  jeep: '4x4 Jeep (per group)',
+  activities: 'Adventure Activities (per person)',
+  lunchVeg: 'Veg Thali',
+  lunchChicken: 'Chicken Thali',
+  lunchPork: 'Pork Thali',
+  tent: 'Camping Tent (per tent)',
+  campMeals: 'Camping Meals (per person)',
+  overnightGuide: 'Overnight Guide (mandatory with camping)',
+  bamboo_chicken500: 'Fresh Bamboo Chicken (500g)',
+  bamboo_chicken1kg: 'Fresh Bamboo Chicken (1kg)',
+  bamboo_pork500: 'Fresh Bamboo Pork (500g)',
+  bamboo_pork1kg: 'Fresh Bamboo Pork (1kg)',
+  bamboo_porkbelly500: 'Roasted Pork Belly Salad (500g)',
+  bamboo_porkbelly1kg: 'Roasted Pork Belly Salad (1kg)',
+  bamboo_boiledFish: 'Boiled Fish (Zero Oil)',
+  bamboo_vegSabji: 'Veg Bamboo Sabji',
+  bamboo_boiledEgg: 'Boiled Egg',
+  bamboo_bambooChai: 'Bamboo Chai',
+};
+
+function applyPriceForKey(key, price){
+  if(key === 'jeep') PRICES.jeep = price;
+  else if(key === 'guide') PRICES.guide = price;
+  else if(key === 'activities') PRICES.activityPerPerson = price;
+  else if(key === 'lunchVeg') PRICES.lunch.veg = price;
+  else if(key === 'lunchChicken') PRICES.lunch.chicken = price;
+  else if(key === 'lunchPork') PRICES.lunch.pork = price;
+  else if(key === 'tent') PRICES.tent = price;
+  else if(key === 'campMeals') PRICES.campMealsPerPerson = price;
+  else if(key === 'overnightGuide') PRICES.overnightGuide = price;
+  else if(key.startsWith('bamboo_')){
+    const id = key.replace('bamboo_', '');
+    const item = PRICES.bamboo.find((b) => b.id === id);
+    if(item) item.price = price;
+  }
+}
+
+async function loadCatalog(){
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/packages`);
+    const data = await res.json();
+    const pkg = (data.packages || [])[0];
+    if(pkg && pkg.id) PACKAGE_ID = pkg.id;
+
+    const byName = {};
+    (data.services || []).forEach((s) => { byName[s.name] = s; });
+
+    Object.keys(SERVICE_NAME_MAP).forEach((key) => {
+      const match = byName[SERVICE_NAME_MAP[key]];
+      if(match){
+        SERVICE_IDS[key] = match.id;
+        applyPriceForKey(key, match.price);
+      } else {
+        console.warn(`Catalog sync: service "${SERVICE_NAME_MAP[key]}" not found in backend — keeping fallback id ${SERVICE_IDS[key]}. Check the services table in D1.`);
+      }
+    });
+
+    buildBambooItems();
+    // buildBambooItems() regenerates the bamboo rows from scratch (qty text
+    // reset to "0"), so re-apply any quantities the visitor already picked
+    // before the catalog fetch resolved.
+    Object.keys(counters).forEach((key) => {
+      const qtyEl = document.getElementById(key + '_qty');
+      const subEl = document.getElementById(key + '_sub');
+      if(qtyEl) qtyEl.textContent = counters[key];
+      if(subEl) subEl.textContent = fmt(counters[key] * priceOf(key));
+    });
+    recalc();
+  } catch(err){
+    console.error('Could not load live catalog, falling back to hardcoded ids/prices:', err);
+  } finally {
+    catalogReadyResolve();
+  }
+}
+loadCatalog();
 
 function buildBambooItems(){
   const wrap = document.getElementById('bambooItems');
@@ -633,6 +763,34 @@ document.addEventListener('click', function(e){
   document.getElementById(target+'_qty').textContent = counters[target];
   document.getElementById(target+'_sub').textContent = fmt(counters[target]*priceOf(target));
   recalc();
+});
+
+function openLunchModal(){
+  document.getElementById('lunchModalOverlay').classList.add('open');
+}
+function closeLunchModal(){
+  document.getElementById('lunchModalOverlay').classList.remove('open');
+  applyLunchPackChoice();
+}
+function applyLunchPackChoice(){
+  const packing = document.querySelector('input[name="lunchPack"]:checked').value === 'yes';
+  document.getElementById('lunchThaliBlock').style.display = packing ? 'none' : '';
+  document.getElementById('lunchPackedNote').style.display = packing ? '' : 'none';
+  document.getElementById('lunchChoiceValue').innerHTML = packing
+    ? 'Yes &ndash; bringing my own <span class="chev">&#8250;</span>'
+    : 'No &ndash; order thali below <span class="chev">&#8250;</span>';
+  if(packing){
+    ['lunchVeg','lunchChicken','lunchPork'].forEach(k=>{
+      counters[k] = 0;
+      document.getElementById(k+'_qty').textContent = 0;
+      document.getElementById(k+'_sub').textContent = fmt(0);
+    });
+  }
+  recalc();
+}
+document.querySelectorAll('input[name="lunchPack"]').forEach(r=>r.addEventListener('change', applyLunchPackChoice));
+document.getElementById('lunchModalOverlay').addEventListener('click', function(e){
+  if(e.target === this) closeLunchModal();
 });
 
 document.getElementById('bambooToggle').addEventListener('click', function(){
@@ -867,6 +1025,7 @@ async function submitManualBooking(){
     manualBtn.disabled = true;
     manualBtn.textContent = 'Submitting...';
     try {
+      await catalogReady; // make sure packageId/service ids reflect the real DB before we submit
       const res = await fetch(`${BACKEND_URL}/api/booking`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -883,7 +1042,8 @@ async function submitManualBooking(){
       });
       const data = await res.json();
       if(!res.ok && !data.booking){
-        alert('Something went wrong creating your booking. Please try again or contact us directly.');
+        console.error('Booking creation failed:', data);
+        alert(`Something went wrong creating your booking${(data.message || data.error) ? ' (' + (data.message || data.error) + ')' : ''}. Please try again or contact us directly.`);
         return;
       }
       window.currentBookingId = data.booking.id;
@@ -948,6 +1108,7 @@ async function payWithRazorpay(){
   payNowBtn.textContent = 'Processing...';
 
   try {
+    await catalogReady; // make sure packageId/service ids reflect the real DB before we submit
     const res = await fetch(`${BACKEND_URL}/api/booking`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -966,8 +1127,8 @@ async function payWithRazorpay(){
     const data = await res.json();
 
     if(!res.ok || data.error){
-      alert('Something went wrong creating your booking. Please try again or contact us directly.');
-      console.error(data);
+      console.error('Booking creation failed:', data);
+      alert(`Something went wrong creating your booking${(data.message || data.error) ? ' (' + (data.message || data.error) + ')' : ''}. Please try again or contact us directly.`);
       return;
     }
 
