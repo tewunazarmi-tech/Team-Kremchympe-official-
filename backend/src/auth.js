@@ -24,22 +24,34 @@ export async function redeemGuideCode(db, code, chatId, guideName) {
   if (row.used) return { ok: false, reason: 'already_used' };
   if (row.expires_at && new Date(row.expires_at) < new Date()) return { ok: false, reason: 'expired' };
 
-  const existing = await db.prepare('SELECT * FROM guides WHERE telegram_chat_id = ?').bind(String(chatId)).first();
   let guideId;
-  if (existing) {
-    guideId = existing.id;
+
+  // This code was generated for a specific pre-created guide profile
+  // (➕ Add Guide) — link Telegram to THAT record instead of creating a
+  // duplicate guide.
+  if (row.guide_id) {
+    guideId = row.guide_id;
     await db
-      .prepare("UPDATE guides SET status='active', access_removed=0, eligible_scope=? WHERE id=?")
-      .bind(row.scope, guideId)
+      .prepare("UPDATE guides SET telegram_chat_id = ?, status='active', access_removed=0 WHERE id=?")
+      .bind(String(chatId), guideId)
       .run();
   } else {
-    const res = await db
-      .prepare(
-        `INSERT INTO guides (telegram_chat_id, name, status, eligible_scope) VALUES (?, ?, 'active', ?)`
-      )
-      .bind(String(chatId), guideName || row.guide_name_hint || 'Guide', row.scope)
-      .run();
-    guideId = res.meta.last_row_id;
+    const existing = await db.prepare('SELECT * FROM guides WHERE telegram_chat_id = ?').bind(String(chatId)).first();
+    if (existing) {
+      guideId = existing.id;
+      await db
+        .prepare("UPDATE guides SET status='active', access_removed=0, eligible_scope=? WHERE id=?")
+        .bind(row.scope, guideId)
+        .run();
+    } else {
+      const res = await db
+        .prepare(
+          `INSERT INTO guides (telegram_chat_id, name, status, eligible_scope) VALUES (?, ?, 'active', ?)`
+        )
+        .bind(String(chatId), guideName || row.guide_name_hint || 'Guide', row.scope)
+        .run();
+      guideId = res.meta.last_row_id;
+    }
   }
 
   await db

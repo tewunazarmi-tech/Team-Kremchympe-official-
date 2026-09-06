@@ -1,6 +1,6 @@
 import {
   listContent, listPackages, listDiscounts, createBooking, updateBookingStatus,
-  recordPaymentCaptured, capturedPaymentAlreadyProcessed, getAdminRole,
+  recordPaymentCaptured, capturedPaymentAlreadyProcessed, getAdminRole, getSiteSettings,
 } from './db.js';
 import { computeFinalAmount, generateBookingCode, confirmBookingAndAssign } from './booking.js';
 import { createRazorpayOrder, verifyCheckoutSignature, verifyWebhookSignature } from './razorpay.js';
@@ -33,8 +33,9 @@ export default {
     try {
       // ---- Public website content API ----
       if (url.pathname === '/api/website' && request.method === 'GET') {
+        const site = await getSiteSettings(env.DB);
         const content = await listContent(env.DB);
-        return json({ content: content.filter((c) => c.visible) });
+        return json({ siteEnabled: !!site.site_enabled, content: content.filter((c) => c.visible) });
       }
 
       if (url.pathname === '/api/packages' && request.method === 'GET') {
@@ -61,8 +62,66 @@ export default {
         return json(quote);
       }
 
+      // ---- Public: live status for the visitor's thank-you screen (poll this
+      // right after receipt upload so "pending verification" updates the
+      // instant an admin confirms/rejects it — no financial data returned). ----
+      if (url.pathname === '/api/booking-status' && request.method === 'GET') {
+        const code = url.searchParams.get('code');
+        if (!code) return json({ error: 'missing_code' }, 400);
+        const row = await env.DB
+          .prepare(
+            `SELECT b.booking_code, b.payment_status, b.booking_status, b.visit_date, b.participants,
+                    p.name AS package_name, g.name AS guide_name, g.phone AS guide_phone
+             FROM bookings b
+             LEFT JOIN packages p ON p.id = b.package_id
+             LEFT JOIN guides g ON g.id = b.guide_id
+             WHERE b.booking_code = ?`
+          )
+          .bind(code)
+          .first();
+        if (!row) return json({ error: 'not_found' }, 404);
+        return json({
+          bookingCode: row.booking_code,
+          paymentStatus: row.payment_status,
+          bookingStatus: row.booking_status,
+          packageName: row.package_name,
+          visitDate: row.visit_date,
+          participants: row.participants,
+          guideName: row.guide_name || null,
+          guidePhone: row.guide_phone || null,
+        });
+      }
+
+      // ---- Public: assigned guide's contact info for a booking (for the "chat with your guide" WhatsApp link). Only name/phone — no financial data. ----
+      if (url.pathname === '/api/booking-contact' && request.method === 'GET') {
+        const code = url.searchParams.get('code');
+        if (!code) return json({ error: 'missing_code' }, 400);
+        const row = await env.DB
+          .prepare(
+            `SELECT b.booking_code, b.visit_date, b.participants, b.package_id, p.name AS package_name,
+                    g.name AS guide_name, g.phone AS guide_phone
+             FROM bookings b
+             LEFT JOIN packages p ON p.id = b.package_id
+             LEFT JOIN guides g ON g.id = b.guide_id
+             WHERE b.booking_code = ?`
+          )
+          .bind(code)
+          .first();
+        if (!row) return json({ error: 'not_found' }, 404);
+        return json({
+          bookingCode: row.booking_code,
+          packageName: row.package_name,
+          visitDate: row.visit_date,
+          participants: row.participants,
+          guideName: row.guide_name || null,
+          guidePhone: row.guide_phone || null,
+        });
+      }
+
       // ---- Booking creation. Backend decides manual vs gateway, not the caller. ----
       if (url.pathname === '/api/booking' && request.method === 'POST') {
+        const site = await getSiteSettings(env.DB);
+        if (!site.site_enabled) return json({ error: 'site_disabled' }, 503);
         const body = await request.json();
         return await handleCreateBooking(env, body);
       }
@@ -103,17 +162,54 @@ export default {
     }
   },
 
-  // ---- Cron trigger: send 1-day-before reminders (wire up in wrangler.toml [triggers]) ----
+  // ---- Cron trigger: send 24h/2h/30m-before guide reminders (wire up in wrangler.toml [triggers]) ----
+  // Retries failed sends up to 5 times (a transient Telegram API error doesn't
+  // burn the reminder); skips bookings that are no longer active (cancelled,
+  // completed, or the guide was reassigned/removed — those reminders were
+  // already deleted at the source, this is just a defensive re-check).
   async scheduled(event, env, ctx) {
+    const MAX_ATTEMPTS = 5;
+    const REMINDER_LABEL = { '24h': '24 hours', '2h': '2 hours', '30m': '30 minutes' };
     const due = (
-      await env.DB.prepare("SELECT * FROM reminders WHERE sent = 0 AND scheduled_for <= datetime('now')").all()
+      await env.DB.prepare("SELECT * FROM reminders WHERE sent = 0 AND scheduled_for <= datetime('now') AND attempts < ?").bind(MAX_ATTEMPTS).all()
     ).results;
+
     for (const r of due) {
-      const booking = await env.DB.prepare('SELECT * FROM bookings WHERE id = ?').bind(r.booking_id).first();
+      const booking = await env.DB
+        .prepare(
+          `SELECT b.*, v.name AS visitor_name, p.name AS package_name
+           FROM bookings b LEFT JOIN visitors v ON v.id = b.visitor_id LEFT JOIN packages p ON p.id = b.package_id
+           WHERE b.id = ?`
+        )
+        .bind(r.booking_id)
+        .first();
       const guide = await env.DB.prepare('SELECT * FROM guides WHERE id = ?').bind(r.guide_id).first();
-      if (!booking || !guide || !['confirmed', 'assigned'].includes(booking.booking_status)) continue;
-      await sendMessage(env, guide.telegram_chat_id, `🔔 Reminder: booking <b>${booking.booking_code}</b> is scheduled for tomorrow (${booking.visit_date}).`);
-      await env.DB.prepare('UPDATE reminders SET sent = 1 WHERE id = ?').bind(r.id).run();
+
+      const stillActive = booking && guide && booking.guide_id === guide.id && !['cancelled', 'rejected', 'completed'].includes(booking.booking_status);
+      if (!stillActive) {
+        // Booking/guide no longer matches this reminder — drop it rather than retry forever.
+        await env.DB.prepare('UPDATE reminders SET sent = 1 WHERE id = ?').bind(r.id).run();
+        continue;
+      }
+
+      const text =
+        `⏰ <b>Reminder — ${REMINDER_LABEL[r.kind] || r.kind} to go</b>\n\n` +
+        `Booking ID: #${booking.booking_code}\n👤 ${booking.visitor_name || '?'}\n👥 ${booking.participants} guests\n` +
+        `📦 ${booking.package_name || booking.package_id}\n📅 ${booking.visit_date} · ⏰ ${booking.visit_time}\n` +
+        `${booking.meeting_point ? `📍 Meeting point: ${booking.meeting_point}` : ''}`;
+
+      let result;
+      try {
+        result = await sendMessage(env, guide.telegram_chat_id, text);
+      } catch (err) {
+        console.error('Reminder send failed', err);
+        result = { ok: false };
+      }
+      if (result && result.ok !== false) {
+        await env.DB.prepare('UPDATE reminders SET sent = 1 WHERE id = ?').bind(r.id).run();
+      } else {
+        await env.DB.prepare('UPDATE reminders SET attempts = attempts + 1 WHERE id = ?').bind(r.id).run();
+      }
     }
   },
 };
@@ -140,7 +236,7 @@ async function handleCreateBooking(env, body) {
     participants,
     visitDate,
     selectedServices,
-    discountId,
+    discountId: pricing.appliedDiscountId, // only the discount that actually qualified is stored
     ...pricing,
     idempotencyKey,
   });
@@ -357,7 +453,7 @@ async function handleTelegramWebhook(env, request) {
     if (sender.type === 'admin') {
       await handleAdminCallback(env, db, chatId, data, update.callback_query.id, messageId);
     } else if (sender.type === 'guide') {
-      await handleGuideCallback(env, db, chatId, data, sender.guide);
+      await handleGuideCallback(env, db, chatId, data, sender.guide, update.callback_query.id);
     }
   }
 

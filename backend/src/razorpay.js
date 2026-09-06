@@ -59,6 +59,25 @@ export async function verifyWebhookSignature(env, rawBody, signatureHeader) {
   return expected === signatureHeader;
 }
 
+// Issues a refund against a captured Razorpay payment. Amount is in the
+// major currency unit (e.g. rupees) and converted to paise here. Passing no
+// amount refunds the full remaining captured amount.
+export async function createRazorpayRefund(env, { paymentId, amount }) {
+  const auth = btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`);
+  const body = {};
+  if (amount != null) body.amount = Math.round(amount * 100);
+  const res = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, reason: data?.error?.description || `HTTP ${res.status}` };
+  }
+  return { ok: true, refund: data };
+}
+
 // ---- Admin-configured secrets ----
 // The admin bot collects Key ID / Key Secret / Webhook Secret in a private
 // Telegram chat, then this function pushes them straight into Cloudflare's
