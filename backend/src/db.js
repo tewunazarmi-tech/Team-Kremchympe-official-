@@ -260,7 +260,7 @@ export async function recordPaymentCaptured(db, bookingId, amount, razorpayPayme
   return { booking, crossedMinAdvance: wasBelowMin && nowAtOrAboveMin };
 }
 
-export async function updateBookingStatus(db, bookingId, { paymentStatus, bookingStatus, razorpayOrderId, razorpayPaymentId, guideId, receiptFileId }) {
+export async function updateBookingStatus(db, bookingId, { paymentStatus, bookingStatus, razorpayOrderId, razorpayPaymentId, guideId, receiptFileId, receiptIsImage }) {
   await db
     .prepare(
       `UPDATE bookings SET
@@ -270,10 +270,20 @@ export async function updateBookingStatus(db, bookingId, { paymentStatus, bookin
          razorpay_payment_id = COALESCE(?, razorpay_payment_id),
          guide_id = COALESCE(?, guide_id),
          receipt_file_id = COALESCE(?, receipt_file_id),
+         receipt_is_image = COALESCE(?, receipt_is_image),
          updated_at = datetime('now')
        WHERE id = ?`
     )
-    .bind(paymentStatus ?? null, bookingStatus ?? null, razorpayOrderId ?? null, razorpayPaymentId ?? null, guideId ?? null, receiptFileId ?? null, bookingId)
+    .bind(
+      paymentStatus ?? null,
+      bookingStatus ?? null,
+      razorpayOrderId ?? null,
+      razorpayPaymentId ?? null,
+      guideId ?? null,
+      receiptFileId ?? null,
+      receiptIsImage == null ? null : (receiptIsImage ? 1 : 0),
+      bookingId
+    )
     .run();
 }
 

@@ -332,7 +332,7 @@ async function handleReceiptUpload(env, request) {
     console.error(`No admin configured to receive receipt for booking ${booking.id}`);
   }
 
-  await updateBookingStatus(env.DB, bookingId, { receiptFileId: fileId, paymentStatus: 'awaiting_verification' });
+  await updateBookingStatus(env.DB, bookingId, { receiptFileId: fileId, receiptIsImage: isImage, paymentStatus: 'awaiting_verification' });
 
   return json({ ok: true });
 }
