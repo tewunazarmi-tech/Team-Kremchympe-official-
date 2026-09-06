@@ -118,10 +118,15 @@ CREATE TABLE IF NOT EXISTS bookings (
   -- failed               = gateway payment failed
   -- rejected             = admin rejected a manual booking after reviewing the receipt
   booking_status TEXT NOT NULL DEFAULT 'pending',
-  -- pending | confirmed | assigned | completed | rejected | cancelled
-  -- 'confirmed' = payment accepted (gateway verified/partial, or admin-approved manual) but no
-  --               guide assigned yet (either not attempted, or none eligible)
-  -- 'assigned'  = confirmed AND a guide has been assigned
+  -- pending | confirmed | guide_required | assigned | guide_accepted | in_progress
+  -- | completed | rejected | cancelled
+  -- 'confirmed'      = payment accepted, no guide assignment attempted/settled yet
+  -- 'guide_required' = payment accepted but no eligible active guide was found — needs admin action
+  -- 'assigned'       = confirmed AND a guide has been assigned, awaiting their accept/decline
+  -- 'guide_accepted' = the assigned guide tapped ✅ Accept
+  -- 'in_progress'    = guide tapped ✅ Mark Started
+  -- 'completed'      = guide tapped 🏁 Mark Completed
+  -- 'cancelled'      = admin cancelled (see cancel_reason/cancelled_by/cancelled_at)
   razorpay_order_id TEXT,
   razorpay_payment_id TEXT,
   amount_paid_total REAL NOT NULL DEFAULT 0, -- sum of all captured payments (supports advance + later top-ups)
@@ -154,9 +159,12 @@ CREATE TABLE IF NOT EXISTS reminders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   booking_id INTEGER NOT NULL REFERENCES bookings(id),
   guide_id INTEGER NOT NULL REFERENCES guides(id),
+  kind TEXT NOT NULL DEFAULT '24h', -- '24h' | '2h' | '30m'
   scheduled_for TEXT NOT NULL,
   sent INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(booking_id, guide_id, kind)
 );
 
 -- ===== Payment gateway config (NON-secret metadata only) =====
@@ -206,3 +214,73 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(booking_status);
 CREATE INDEX IF NOT EXISTS idx_bookings_guide ON bookings(guide_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_pending ON reminders(sent, scheduled_for);
+
+-- ===== Migration additions (bookings/guides/discounts lifecycle + guide availability) =====
+-- Bookings: cancellation, refund, guide accept/decline, in-progress/completed tracking, contact/meeting info
+ALTER TABLE bookings ADD COLUMN cancel_reason TEXT;
+ALTER TABLE bookings ADD COLUMN cancelled_by TEXT;
+ALTER TABLE bookings ADD COLUMN cancelled_at TEXT;
+ALTER TABLE bookings ADD COLUMN refund_amount REAL NOT NULL DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN refunded_at TEXT;
+-- guide_accept_status: NULL (no guide yet) | pending | accepted | declined
+ALTER TABLE bookings ADD COLUMN guide_accept_status TEXT;
+ALTER TABLE bookings ADD COLUMN decline_reason TEXT;
+ALTER TABLE bookings ADD COLUMN started_at TEXT;
+ALTER TABLE bookings ADD COLUMN completed_at TEXT;
+ALTER TABLE bookings ADD COLUMN meeting_point TEXT;
+-- booking_status now also uses: guide_required | guide_accepted | in_progress | cancelled (in addition to the original set)
+
+-- Guides: manual availability toggle + workload cap + soft profile fields
+ALTER TABLE guides ADD COLUMN available INTEGER NOT NULL DEFAULT 1; -- guide's own 🟢/🔴 toggle
+ALTER TABLE guides ADD COLUMN max_bookings_per_day INTEGER NOT NULL DEFAULT 5;
+ALTER TABLE guides ADD COLUMN admin_override_available INTEGER; -- admin can force-override availability (NULL = no override)
+ALTER TABLE guides ADD COLUMN pin TEXT; -- optional guide-set PIN (⚙️ Guide Settings)
+ALTER TABLE guides ADD COLUMN notify_new_booking INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE guides ADD COLUMN reminder_24h INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE guides ADD COLUMN reminder_2h INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE guides ADD COLUMN reminder_30m INTEGER NOT NULL DEFAULT 1;
+
+-- Bookings: a specific time-of-day for the tour, needed for 24h/2h/30m reminders
+ALTER TABLE bookings ADD COLUMN visit_time TEXT NOT NULL DEFAULT '09:00';
+
+-- Per-weekday availability schedule for a guide (spec section 19)
+CREATE TABLE IF NOT EXISTS guide_schedule (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guide_id INTEGER NOT NULL REFERENCES guides(id),
+  day_of_week INTEGER NOT NULL,   -- 0=Sunday .. 6=Saturday
+  available INTEGER NOT NULL DEFAULT 1,
+  start_time TEXT,                -- 'HH:MM'
+  end_time TEXT,                  -- 'HH:MM'
+  UNIQUE(guide_id, day_of_week)
+);
+
+-- Specific one-off unavailable dates for a guide (overrides the weekday schedule)
+CREATE TABLE IF NOT EXISTS guide_unavailable_dates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guide_id INTEGER NOT NULL REFERENCES guides(id),
+  date TEXT NOT NULL,             -- 'YYYY-MM-DD'
+  UNIQUE(guide_id, date)
+);
+
+-- Discounts: coupon codes, scheduling window, usage caps (spec section 6)
+ALTER TABLE discounts ADD COLUMN coupon_code TEXT;
+ALTER TABLE discounts ADD COLUMN start_date TEXT;
+ALTER TABLE discounts ADD COLUMN end_date TEXT;
+ALTER TABLE discounts ADD COLUMN max_usage INTEGER;
+ALTER TABLE discounts ADD COLUMN used_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE discounts ADD COLUMN min_booking_amount REAL NOT NULL DEFAULT 0;
+ALTER TABLE discounts ADD COLUMN discount_type TEXT NOT NULL DEFAULT 'percent'; -- percent | fixed
+
+-- Links a guide code to the specific pre-created guide profile it's meant to
+-- activate (from ➕ Add Guide), so redemption links Telegram to THAT guide
+-- rather than creating a duplicate. NULL = generic code (👥 Guides →
+-- 🔑 Generate Code (any)), which creates a fresh guide record on redemption.
+ALTER TABLE guide_codes ADD COLUMN guide_id INTEGER REFERENCES guides(id);
+
+-- Site-wide settings not tied to payments (spec section 4 / 30, ⚙️ Settings)
+CREATE TABLE IF NOT EXISTS site_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  site_enabled INTEGER NOT NULL DEFAULT 1, -- 🟢 Enable / 🔴 Disable whole website
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO site_settings (id) VALUES (1);

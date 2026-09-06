@@ -33,3 +33,18 @@ INSERT INTO services (package_id, name, price, active, sort_order) VALUES
   (1, 'Veg Bamboo Sabji', 300, 1, 17),
   (1, 'Boiled Egg', 20, 1, 18),
   (1, 'Bamboo Chai', 20, 1, 19);
+
+-- Website copy exposed to the Telegram admin bot's 🌐 Website menu (Edit
+-- Sections). Each row here matches a data-cms="section.key" tag in
+-- index.html, so editing it via the bot updates the live site immediately —
+-- no redeploy needed. Add more rows the same way for any other text you
+-- want the admin to control from Telegram.
+INSERT INTO website_content (section, key, value, content_type) VALUES
+  ('hero', 'title', 'Book Your Krem Chympe Adventure & Camping', 'text'),
+  ('hero', 'tagline', 'Fill in your details below to reserve your adventure & camping experience.', 'text'),
+  ('payment', 'advance_heading', 'Advance payment needed – ₹500 minimum', 'text'),
+  ('payment', 'gateway_heading', 'Advance payment needed – ₹500 minimum', 'text'),
+  ('payment', 'receipt_label', '📎 Upload Receipt', 'text'),
+  ('thankyou', 'heading', 'Enjoy your Adventure With Us', 'text'),
+  ('thankyou', 'intro', 'Thank you for your booking!', 'text'),
+  ('thankyou', 'whatsapp_label', '📞 Tap to Chat with Your Guide', 'text');

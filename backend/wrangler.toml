@@ -2,6 +2,12 @@ name = "kremchympe-backend"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 
+# ----- Cron trigger for reminders (24h/2h/30m-before guide notifications) -----
+# Runs every 5 minutes so the 30-minute-before reminder is never more than a
+# few minutes late. See scheduled() in src/index.js.
+[triggers]
+crons = ["*/5 * * * *"]
+
 # ----- D1 database binding -----
 # Create with: wrangler d1 create kremchympe-db
 # then paste the returned database_id below.
