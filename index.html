@@ -110,21 +110,14 @@
   .thali-card .counter-row{padding:8px 0 0;border:none;}
   .choice-row{
     display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;
-    border:1px solid #E7E1F7;border-radius:10px;padding:12px 14px;margin-bottom:14px;background:var(--purple-light);
+    border:1px solid #E7E1F7;border-radius:10px;padding:12px 14px;background:var(--purple-light);
   }
   .choice-row .choice-label{font-size:14.5px;font-weight:500;}
   .choice-row .choice-value{font-size:13.5px;color:var(--purple-dark);display:flex;align-items:center;gap:2px;white-space:nowrap;}
-  .choice-row .chev{color:var(--purple);font-size:17px;}
-  .modal-overlay{
-    display:none;position:fixed;inset:0;background:rgba(38,32,59,0.5);
-    align-items:center;justify-content:center;z-index:1000;padding:20px;
-  }
-  .modal-overlay.open{display:flex;}
-  .modal-card{
-    background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
-    padding:22px;max-width:420px;width:100%;
-  }
-  .modal-card h3{margin:0 0 4px;font-size:17px;font-weight:600;}
+  .choice-row .chev{color:var(--purple);font-size:17px;transition:transform .25s ease;}
+  .choice-row.open .chev{transform:rotate(180deg);}
+  .choice-body{max-height:0;overflow:hidden;transition:max-height .3s ease;}
+  .choice-body.open{max-height:400px;margin-top:12px;}
   .pay-detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F0ECFA;}
   .pay-detail-row:last-child{border-bottom:none;}
   .pay-detail-value{font-family:'Courier New',monospace;font-size:15px;font-weight:600;word-break:break-all;}
@@ -291,15 +284,20 @@
 
       <div class="card">
         <h3>Lunch &ndash; &#8377;300 per person</h3>
+        <p class="note"><em>Note: If you pack your own lunch, you can have it after the adventure and before visiting Chympe Falls.</em></p>
 
-        <div class="choice-row" id="lunchChoiceRow" onclick="openLunchModal()">
+        <div class="choice-row" id="lunchPackToggle">
           <div class="choice-label">Packing your own lunch?</div>
-          <div class="choice-value" id="lunchChoiceValue">No &ndash; order thali below <span class="chev">&#8250;</span></div>
+          <div class="choice-value" id="lunchChoiceValue">No <span class="chev">&#9660;</span></div>
+        </div>
+        <div class="choice-body" id="lunchPackBody">
+          <label class="radio-row"><input type="radio" name="lunchPack" value="no" checked> No, I'd like to order a thali</label>
+          <label class="radio-row"><input type="radio" name="lunchPack" value="yes"> Yes, I'll bring my own</label>
         </div>
 
-        <p class="note" id="lunchPackedNote" style="display:none;">You're all set &ndash; enjoy your packed lunch after the adventure, before visiting Chympe Falls.</p>
+        <p class="note" id="lunchPackedNote" style="display:none;margin-top:12px;">You're all set &ndash; enjoy your packed lunch after the adventure, before visiting Chympe Falls.</p>
 
-        <div id="lunchThaliBlock">
+        <div id="lunchThaliBlock" style="margin-top:14px;">
           <p class="note">Select your thali(s) and choose the quantity for each.</p>
 
           <div class="thali-card">
@@ -343,19 +341,6 @@
         </div>
       </div>
 
-      <!-- Lunch pack yes/no popup -->
-      <div class="modal-overlay" id="lunchModalOverlay">
-        <div class="modal-card">
-          <h3>Packing your own lunch?</h3>
-          <p class="note"><em>Note: If you pack your own lunch, you can have it after the adventure and before visiting Chympe Falls.</em></p>
-          <label class="radio-row"><input type="radio" name="lunchPack" value="yes"> Yes, I'll bring my own</label>
-          <label class="radio-row"><input type="radio" name="lunchPack" value="no" checked> No, I'd like to order a thali</label>
-          <div class="btn-row" style="margin-top:14px;">
-            <div></div>
-            <button type="button" class="btn btn-primary" onclick="closeLunchModal()">Done</button>
-          </div>
-        </div>
-      </div>
 
       <div class="card">
         <h3>Camping</h3>
@@ -765,20 +750,11 @@ document.addEventListener('click', function(e){
   recalc();
 });
 
-function openLunchModal(){
-  document.getElementById('lunchModalOverlay').classList.add('open');
-}
-function closeLunchModal(){
-  document.getElementById('lunchModalOverlay').classList.remove('open');
-  applyLunchPackChoice();
-}
 function applyLunchPackChoice(){
   const packing = document.querySelector('input[name="lunchPack"]:checked').value === 'yes';
   document.getElementById('lunchThaliBlock').style.display = packing ? 'none' : '';
   document.getElementById('lunchPackedNote').style.display = packing ? '' : 'none';
-  document.getElementById('lunchChoiceValue').innerHTML = packing
-    ? 'Yes &ndash; bringing my own <span class="chev">&#8250;</span>'
-    : 'No &ndash; order thali below <span class="chev">&#8250;</span>';
+  document.getElementById('lunchChoiceValue').innerHTML = (packing ? 'Yes' : 'No') + ' <span class="chev">&#9660;</span>';
   if(packing){
     ['lunchVeg','lunchChicken','lunchPork'].forEach(k=>{
       counters[k] = 0;
@@ -789,8 +765,9 @@ function applyLunchPackChoice(){
   recalc();
 }
 document.querySelectorAll('input[name="lunchPack"]').forEach(r=>r.addEventListener('change', applyLunchPackChoice));
-document.getElementById('lunchModalOverlay').addEventListener('click', function(e){
-  if(e.target === this) closeLunchModal();
+document.getElementById('lunchPackToggle').addEventListener('click', function(){
+  this.classList.toggle('open');
+  document.getElementById('lunchPackBody').classList.toggle('open');
 });
 
 document.getElementById('bambooToggle').addEventListener('click', function(){
