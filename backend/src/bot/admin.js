@@ -1,7 +1,7 @@
-import { sendMessage, inlineKeyboard, answerCallback } from '../telegram.js';
+import { sendMessage, inlineKeyboard, answerCallback, sendPhotoToChat, sendDocumentById } from '../telegram.js';
 import {
   getSession, setSession, clearSession, upsertPackage, listPackages, upsertDiscount, logAudit,
-  listBookingsByFilter, searchBookings, getBookingFull, cancelBooking, recordRefund, editBookingField,
+  listBookingsByFilter, searchBookings, getBookingFull, getBookingByCode, cancelBooking, recordRefund, editBookingField,
   setBookingGuide, listActiveEligibleGuides,
   listGuides, searchGuides, getGuide, createGuideProfile, setGuideStatus, removeGuideAccess, resetGuideAccount,
   generateGuideCodeFor, getGuideWorkload, listBookingsForGuide,
@@ -64,7 +64,76 @@ export async function handleAdminMessage(env, db, chatId, text) {
     return sendMessage(env, chatId, '👋 <b>Krem Chympe Admin</b>\nChoose a section:', { keyboard: mainMenu() });
   }
 
+  // Free-text that isn't a command or an active flow: treat it as a
+  // pasted booking code (e.g. copied from a visitor's "no response yet"
+  // WhatsApp message) and look it up directly — no need to open /menu
+  // first. Tells the admin which guide has it and re-sends the receipt
+  // so they can verify without digging through the Bookings menu.
+  if (await handleBookingCodeLookup(env, db, chatId, text)) return;
+
   return sendMessage(env, chatId, "Use /menu to open the admin panel, or tap a button on a previous message.");
+}
+
+// =====================================================================
+// Booking-code lookup — triggered by any free-text message that isn't a
+// command or mid-flow input (see handleAdminMessage above). Matches the
+// exact booking code first (case-insensitive, since it's often pasted
+// from a chat), then falls back to the same fuzzy search the 🔎 Bookings
+// search uses (name/phone/partial code) in case of a typo or partial code.
+// =====================================================================
+
+async function handleBookingCodeLookup(env, db, chatId, rawText) {
+  const term = rawText.trim();
+  if (!term || term.length < 3) return false;
+
+  let booking = await getBookingByCode(db, term.toUpperCase());
+  let matches = booking ? [booking] : await searchBookings(db, term, { limit: 5 });
+  if (!booking && matches.length === 1) booking = matches[0];
+
+  if (!booking) {
+    if (matches.length > 1) {
+      const buttons = matches.map((b) => [
+        { text: `${bookingStatusBadge(b.booking_status)} ${b.booking_code} — ${b.visitor_name}`, callback_data: `bkv:${b.id}` },
+      ]);
+      await sendMessage(env, chatId, `🔎 Found ${matches.length} bookings matching "${term}" — which one?`, {
+        keyboard: inlineKeyboard([...buttons, back('menu:bookings')]),
+      });
+      return true;
+    }
+    return false; // no match at all — let the caller show the generic help text
+  }
+
+  await sendBookingCodeLookupResult(env, db, chatId, booking);
+  return true;
+}
+
+async function sendBookingCodeLookupResult(env, db, chatId, b) {
+  const cancellable = !['cancelled', 'rejected', 'completed'].includes(b.booking_status);
+  await sendMessage(env, chatId, `🔑 <b>Booking code match</b>\n\n${bookingDetailText(b)}`, {
+    keyboard: inlineKeyboard(
+      [
+        [{ text: b.guide_id ? '🔄 Reassign Guide' : '👥 Assign Guide', callback_data: `bka:${b.id}` }],
+        [{ text: '✏️ Edit', callback_data: `bke:${b.id}` }],
+        cancellable ? [{ text: '❌ Cancel', callback_data: `bkc:${b.id}` }] : [],
+        b.amount_paid_total > 0 ? [{ text: '↩️ Refund', callback_data: `bkf:${b.id}` }] : [],
+        back('menu:bookings'),
+      ].filter((r) => r.length)
+    ),
+  });
+
+  if (!b.receipt_file_id) {
+    return sendMessage(env, chatId, 'ℹ️ No receipt on file for this booking (gateway payment, or nothing uploaded yet).');
+  }
+
+  const caption = `🧾 Receipt for ${b.booking_code} — verify before confirming.`;
+  if (b.receipt_is_image === 0) {
+    return sendDocumentById(env, chatId, b.receipt_file_id, caption);
+  }
+  const result = await sendPhotoToChat(env, chatId, b.receipt_file_id, caption);
+  if (!result.ok) {
+    // Legacy row with unknown/mismatched type — one fallback attempt as a document.
+    await sendDocumentById(env, chatId, b.receipt_file_id, caption);
+  }
 }
 
 const TEXT_FLOWS = {
