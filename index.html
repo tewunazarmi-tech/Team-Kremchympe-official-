@@ -118,6 +118,11 @@
   .choice-row.open .chev{transform:rotate(180deg);}
   .choice-body{max-height:0;overflow:hidden;transition:max-height .3s ease;}
   .choice-body.open{max-height:400px;margin-top:12px;}
+  .thali-pack-row{margin-top:10px;}
+  .choice-row-sm{padding:8px 12px;}
+  .choice-row-sm .choice-label{font-size:13px;}
+  .choice-row-sm .choice-value{font-size:12.5px;}
+  .choice-row-sm .chev{font-size:15px;}
   .pay-detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F0ECFA;}
   .pay-detail-row:last-child{border-bottom:none;}
   .pay-detail-value{font-family:'Courier New',monospace;font-size:15px;font-weight:600;word-break:break-all;}
@@ -286,19 +291,6 @@
         <h3>Lunch &ndash; &#8377;300 per person</h3>
         <p class="note"><em>Note: If you pack your lunch, you can have it after the adventure and before visiting Chympe Falls.</em></p>
 
-        <div id="lunchPackSection" style="display:none;">
-          <div class="choice-row" id="lunchPackToggle">
-            <div class="choice-label">Packing your lunch?</div>
-            <div class="choice-value" id="lunchChoiceValue">No <span class="chev">&#9660;</span></div>
-          </div>
-          <div class="choice-body" id="lunchPackBody">
-            <label class="radio-row"><input type="radio" name="lunchPack" value="no" checked> No, I'll have it here</label>
-            <label class="radio-row"><input type="radio" name="lunchPack" value="yes"> Yes, I would like to pack it</label>
-          </div>
-        </div>
-
-        <p class="note" id="lunchPackedNote" style="display:none;margin-top:12px;">You're all set &ndash; enjoy your packed lunch after the adventure, before visiting Chympe Falls.</p>
-
         <div id="lunchThaliBlock" style="margin-top:14px;">
           <p class="note">Select your thali(s) and choose the quantity for each.</p>
 
@@ -313,6 +305,16 @@
               </div>
               <div class="counter-subtotal" id="lunchVeg_sub">&#8377;0</div>
             </div>
+            <div class="thali-pack-row" id="lunchVeg_packRow" style="display:none;">
+              <div class="choice-row choice-row-sm thali-pack-toggle" data-pack="lunchVeg">
+                <div class="choice-label">Lunch Pack?</div>
+                <div class="choice-value" id="lunchVeg_packValue">No <span class="chev">&#9660;</span></div>
+              </div>
+              <div class="choice-body" id="lunchVeg_packBody">
+                <label class="radio-row"><input type="radio" name="lunchPack_lunchVeg" value="no" checked> No, I'll have it here</label>
+                <label class="radio-row"><input type="radio" name="lunchPack_lunchVeg" value="yes"> Yes, I would like to pack it</label>
+              </div>
+            </div>
           </div>
 
           <div class="thali-card">
@@ -326,6 +328,16 @@
               </div>
               <div class="counter-subtotal" id="lunchChicken_sub">&#8377;0</div>
             </div>
+            <div class="thali-pack-row" id="lunchChicken_packRow" style="display:none;">
+              <div class="choice-row choice-row-sm thali-pack-toggle" data-pack="lunchChicken">
+                <div class="choice-label">Lunch Pack?</div>
+                <div class="choice-value" id="lunchChicken_packValue">No <span class="chev">&#9660;</span></div>
+              </div>
+              <div class="choice-body" id="lunchChicken_packBody">
+                <label class="radio-row"><input type="radio" name="lunchPack_lunchChicken" value="no" checked> No, I'll have it here</label>
+                <label class="radio-row"><input type="radio" name="lunchPack_lunchChicken" value="yes"> Yes, I would like to pack it</label>
+              </div>
+            </div>
           </div>
 
           <div class="thali-card">
@@ -338,6 +350,16 @@
                 <div class="counter-btn" data-action="inc" data-target="lunchPork">+</div>
               </div>
               <div class="counter-subtotal" id="lunchPork_sub">&#8377;0</div>
+            </div>
+            <div class="thali-pack-row" id="lunchPork_packRow" style="display:none;">
+              <div class="choice-row choice-row-sm thali-pack-toggle" data-pack="lunchPork">
+                <div class="choice-label">Lunch Pack?</div>
+                <div class="choice-value" id="lunchPork_packValue">No <span class="chev">&#9660;</span></div>
+              </div>
+              <div class="choice-body" id="lunchPork_packBody">
+                <label class="radio-row"><input type="radio" name="lunchPack_lunchPork" value="no" checked> No, I'll have it here</label>
+                <label class="radio-row"><input type="radio" name="lunchPack_lunchPork" value="yes"> Yes, I would like to pack it</label>
+              </div>
             </div>
           </div>
         </div>
@@ -612,6 +634,8 @@ const PRICES = {
 
 let counters = { lunchVeg:0, lunchChicken:0, lunchPork:0, tent:0 };
 PRICES.bamboo.forEach(item => counters['bamboo_'+item.id] = 0);
+// Per-thali "pack it for later?" choice, keyed the same as counters.
+let lunchPack = { lunchVeg:'no', lunchChicken:'no', lunchPork:'no' };
 
 function fmt(n){ return '\u20B9' + Math.round(n).toLocaleString('en-IN'); }
 
@@ -749,35 +773,50 @@ document.addEventListener('click', function(e){
   else counters[target] = Math.max(0, counters[target]-1);
   document.getElementById(target+'_qty').textContent = counters[target];
   document.getElementById(target+'_sub').textContent = fmt(counters[target]*priceOf(target));
-  if(['lunchVeg','lunchChicken','lunchPork'].includes(target)) updateLunchPackVisibility();
+  if(['lunchVeg','lunchChicken','lunchPork'].includes(target)) updateThaliPackRow(target);
   recalc();
 });
 
-// The "packing your own lunch?" question only makes sense once the visitor
-// has actually picked something from the Lunch menu — keep it hidden until
-// then, and hide it again (resetting the choice) if everything is deselected.
-function updateLunchPackVisibility(){
-  const anySelected = counters.lunchVeg > 0 || counters.lunchChicken > 0 || counters.lunchPork > 0;
-  const section = document.getElementById('lunchPackSection');
-  if(anySelected){
-    section.style.display = '';
+// Each thali gets its own small "Lunch Pack?" yes/no question. It only
+// appears once that particular thali has been selected (qty > 0), and it
+// collapses again — resetting back to "No" — the moment it's deselected.
+function updateThaliPackRow(target){
+  const row = document.getElementById(target+'_packRow');
+  if(!row) return;
+  if(counters[target] > 0){
+    row.style.display = '';
   } else {
-    section.style.display = 'none';
-    const noOption = document.querySelector('input[name="lunchPack"][value="no"]');
+    row.style.display = 'none';
+    const noOption = document.querySelector(`input[name="lunchPack_${target}"][value="no"]`);
     if(noOption) noOption.checked = true;
-    applyLunchPackChoice();
+    applyThaliPackChoice(target);
+    row.querySelector('.thali-pack-toggle')?.classList.remove('open');
+    const body = document.getElementById(target+'_packBody');
+    if(body) body.classList.remove('open');
   }
 }
 
-function applyLunchPackChoice(){
-  const packing = document.querySelector('input[name="lunchPack"]:checked').value === 'yes';
-  document.getElementById('lunchPackedNote').style.display = packing ? '' : 'none';
-  document.getElementById('lunchChoiceValue').innerHTML = (packing ? 'Yes' : 'No') + ' <span class="chev">&#9660;</span>';
+function applyThaliPackChoice(target){
+  const checked = document.querySelector(`input[name="lunchPack_${target}"]:checked`);
+  const packing = checked ? checked.value === 'yes' : false;
+  lunchPack[target] = packing ? 'yes' : 'no';
+  const valueEl = document.getElementById(target+'_packValue');
+  if(valueEl) valueEl.innerHTML = (packing ? 'Yes' : 'No') + ' <span class="chev">&#9660;</span>';
 }
-document.querySelectorAll('input[name="lunchPack"]').forEach(r=>r.addEventListener('change', applyLunchPackChoice));
-document.getElementById('lunchPackToggle').addEventListener('click', function(){
-  this.classList.toggle('open');
-  document.getElementById('lunchPackBody').classList.toggle('open');
+
+['lunchVeg','lunchChicken','lunchPork'].forEach(target=>{
+  document.querySelectorAll(`input[name="lunchPack_${target}"]`).forEach(r=>{
+    r.addEventListener('change', function(){ applyThaliPackChoice(target); });
+  });
+});
+
+document.querySelectorAll('.thali-pack-toggle').forEach(toggle=>{
+  toggle.addEventListener('click', function(){
+    const target = this.getAttribute('data-pack');
+    this.classList.toggle('open');
+    const body = document.getElementById(target+'_packBody');
+    if(body) body.classList.toggle('open');
+  });
 });
 
 document.getElementById('bambooToggle').addEventListener('click', function(){
@@ -1219,18 +1258,130 @@ document.querySelectorAll('input[name="paymentMode"]').forEach(r=>{
   });
 });
 
-async function buildWhatsappLink(){
+// Builds the full itemised "Booking Confirmation" text sent to the guide/
+// admin over WhatsApp, grouped into Adventure / Camping / Extra Food /
+// Payment sections, matching each thali's individual Lunch Pack choice.
+function buildConfirmationMessage(){
   const name = document.getElementById('fullName')?.value.trim() || 'N/A';
-  const persons = document.getElementById('numPersons')?.value || '1';
+  const whatsapp = document.getElementById('whatsappNumber')?.value.trim() || 'N/A';
+  const email = document.getElementById('emailId')?.value.trim() || 'N/A';
+  const persons = Math.max(1, parseInt(document.getElementById('numPersons')?.value) || 1);
   const date = document.getElementById('tourDate')?.value || 'N/A';
+
+  const jeepYes = document.querySelector('input[name="jeep"]:checked')?.value === 'yes';
+  const activitiesYes = document.querySelector('input[name="activities"]:checked')?.value === 'yes';
+  const campingYes = isCampingYes();
+  const campMealsYes = document.querySelector('input[name="campMeals"]:checked') ?
+    document.querySelector('input[name="campMeals"]:checked').value === 'yes' : true;
+
+  // ---- Adventure ----
+  const advLines = [];
+  advLines.push(`\u2022 Local Guide (mandatory): ${fmt(PRICES.guide)}`);
+  if(jeepYes) advLines.push(`\u2022 4x4 Jeep (per group): ${fmt(PRICES.jeep)}`);
+  if(activitiesYes) advLines.push(`\u2022 Adventure Activities (${persons} x \u20B9${PRICES.activityPerPerson}): ${fmt(persons*PRICES.activityPerPerson)}`);
+
+  const thaliMeta = [
+    {key:'lunchVeg', name:'Veg Thali', price:PRICES.lunch.veg},
+    {key:'lunchChicken', name:'Chicken Thali', price:PRICES.lunch.chicken},
+    {key:'lunchPork', name:'Pork Thali', price:PRICES.lunch.pork},
+  ];
+  const thaliLines = [];
+  let thaliTotal = 0;
+  thaliMeta.forEach(t=>{
+    const q = counters[t.key];
+    if(q>0){
+      const packed = lunchPack[t.key] === 'yes';
+      thaliLines.push(`\u2022 ${t.name} x${q}: ${fmt(q*t.price)}   = \u2022 Lunch Pack ${packed ? '\u2705' : '\u274C'}`);
+      thaliTotal += q*t.price;
+    }
+  });
+
+  let adventureTotal = PRICES.guide + thaliTotal;
+  if(jeepYes) adventureTotal += PRICES.jeep;
+  if(activitiesYes) adventureTotal += persons*PRICES.activityPerPerson;
+
+  let adventureBody = advLines.join('\n');
+  if(thaliLines.length) adventureBody += (adventureBody ? '\n\n' : '') + thaliLines.join('\n');
+
+  // ---- Camping ----
+  const campLines = [];
+  let campingTotal = 0;
+  if(campingYes){
+    if(counters.tent>0){
+      campLines.push(`\u2022 Camping Tent x${counters.tent}: ${fmt(counters.tent*PRICES.tent)}`);
+      campingTotal += counters.tent*PRICES.tent;
+    }
+    if(campMealsYes){
+      campLines.push(`\u2022 Camping Meals (${persons} x \u20B9${PRICES.campMealsPerPerson}): ${fmt(persons*PRICES.campMealsPerPerson)}`);
+      campingTotal += persons*PRICES.campMealsPerPerson;
+    }
+    campLines.push(`\u2022 Overnight Guide (mandatory): ${fmt(PRICES.overnightGuide)}`);
+    campingTotal += PRICES.overnightGuide;
+  }
+
+  // ---- Extra Food (bamboo dishes) ----
+  const foodLines = [];
+  let foodTotal = 0;
+  if(campingYes){
+    PRICES.bamboo.forEach(item=>{
+      const q = counters['bamboo_'+item.id];
+      if(q>0){
+        foodLines.push(`\u2022 ${item.name} x${q}: ${fmt(q*item.price)}`);
+        foodTotal += q*item.price;
+      }
+    });
+  }
+
+  // ---- Payment ----
+  const grandTotal = adventureTotal + campingTotal + foodTotal;
+  const paid = Math.max(0, window.lastPaid || 0);
+  const due = grandTotal - paid;
+
+  let paymentModeLabel = 'N/A';
+  if(window.currentPaymentMode === 'gateway'){
+    paymentModeLabel = 'Razorpay (Card/UPI/Netbanking)';
+  } else {
+    const pm = document.querySelector('input[name="paymentMode"]:checked')?.value;
+    paymentModeLabel = pm === 'qr' ? 'QR Code' : pm === 'bank' ? 'Bank Transfer' : 'UPI ID';
+  }
+
+  const divider = '\u2501'.repeat(14);
+  function sectionBlock(title, emoji, body, totalLabel, total){
+    let s = `${divider}\n${emoji} ${title}\n${divider}\n\n`;
+    if(body) s += body + '\n\n';
+    s += `${totalLabel}: ${fmt(total)}\n\n`;
+    return s;
+  }
+
+  let msg = `Booking Confirmation - Krem Chympe Adventure & Camping\n\n`;
+  msg += `Name: ${name}\n`;
+  msg += `WhatsApp: ${whatsapp}\n`;
+  msg += `Email: ${email}\n`;
+  msg += `Number of Persons: ${persons}\n`;
+  msg += `Tour Date: ${date}\n\n`;
+  msg += sectionBlock('Adventure (Without Camping)', '\u{1F3DE}\u{FE0F}', adventureBody, 'Adventure Total', adventureTotal);
+  msg += sectionBlock('Camping', '\u{1F3D5}\u{FE0F}', campLines.join('\n'), 'Camping Total', campingTotal);
+  msg += sectionBlock('Extra Food Orders', '\u{1F37D}\u{FE0F}', foodLines.join('\n'), 'Food Total', foodTotal);
+  msg += `${divider}\n\u{1F4B3} Payment Summary\n${divider}\n\n`;
+  msg += `Grand Total: ${fmt(grandTotal)}\n`;
+  msg += `Amount Paid: ${fmt(paid)}\n`;
+  msg += `Amount Due: ${fmt(Math.max(due,0))}\n`;
+  msg += `Payment Mode: ${paymentModeLabel}\n\n`;
+  msg += `I am sending my payment screenshot to confirm this booking.`;
+
+  return msg;
+}
+
+async function buildWhatsappLink(){
   const bookingCode = window.lastBookingCode || 'N/A';
   const linkEl = document.getElementById('whatsappLink');
 
-  // Default (fallback) message + number, used until/unless a guide is
-  // already assigned by the time this page loads.
+  // Default (fallback) number, used until/unless a guide is already
+  // assigned by the time this page loads. The message itself is always
+  // the full itemised booking confirmation.
   let phone = '919863657412';
   let label = '\u{1F4DE} Tap to Chat with Us';
-  let msg = `Hi! I just booked with Krem Chympe.\nName: ${name}\nBooking Code: ${bookingCode}\nDate: ${date}\nPersons: ${persons}\nLooking forward to my trip!`;
+  const msg = buildConfirmationMessage();
 
   if(bookingCode !== 'N/A' && !BACKEND_URL.includes('YOUR-WORKER-SUBDOMAIN')){
     try {
@@ -1239,7 +1390,6 @@ async function buildWhatsappLink(){
       if(data && data.guidePhone){
         phone = data.guidePhone.replace(/[^0-9]/g, '');
         label = '\u{1F4DE} Tap to Chat with Your Guide';
-        msg = `Hi ${data.guideName || ''}! I'm ${name}, booking ${bookingCode} for ${data.packageName || 'my tour'} on ${data.visitDate || date} (${persons} person(s)). Looking forward to it!`;
       }
     } catch(err){
       console.error('Could not fetch guide contact, using default WhatsApp number:', err);
@@ -1394,8 +1544,10 @@ function resetForm(){
   document.getElementById('bookingForm').reset();
   counters = { lunchVeg:0, lunchChicken:0, lunchPork:0, tent:0 };
   PRICES.bamboo.forEach(item => counters['bamboo_'+item.id] = 0);
+  lunchPack = { lunchVeg:'no', lunchChicken:'no', lunchPork:'no' };
   document.querySelectorAll('.counter-qty').forEach(el=>el.textContent='0');
   document.querySelectorAll('.counter-subtotal').forEach(el=>el.textContent=fmt(0));
+  ['lunchVeg','lunchChicken','lunchPork'].forEach(target=>updateThaliPackRow(target));
   document.getElementById('campingHeaderBar').style.display = '';
   document.getElementById('campingIntroCard').style.display = '';
   document.getElementById('campingYesBlock').style.display = '';
