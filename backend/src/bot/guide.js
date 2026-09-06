@@ -120,6 +120,13 @@ export async function handleGuideCallback(env, db, chatId, data, guide, callback
   if (data === 'g:help') return showHelp(env, chatId);
 
   if (data.startsWith('g:view:')) return showBookingDetail(env, db, chatId, guide, parseInt(data.split(':')[2], 10));
+  if (data.startsWith('g:viewfull:')) {
+    const id = parseInt(data.split(':')[2], 10);
+    const b = await getBookingFull(db, id);
+    if (!b || b.guide_id !== guide.id) return sendMessage(env, chatId, 'Booking not found.', { keyboard: inlineKeyboard([back()]) });
+    const detailedText = await generateDetailedBookingMessage(db, b);
+    return sendMessage(env, chatId, detailedText, { keyboard: inlineKeyboard([back(`g:view:${id}`)]) });
+  }
 
   // Accept / decline a new assignment
   if (data.startsWith('g:accept:')) return doAccept(env, db, chatId, guide, parseInt(data.split(':')[2], 10));
@@ -248,9 +255,112 @@ function showAllBookingsFilters(env, chatId) {
   });
 }
 
+async function generateDetailedBookingMessage(db, b) {
+  // Fetch all services to get their names and details
+  const allServices = (await db.prepare('SELECT * FROM services WHERE active = 1').all()).results;
+  const serviceMap = {};
+  allServices.forEach(s => { serviceMap[s.id] = s; });
+
+  // Parse selected services from JSON
+  let selected = [];
+  try {
+    selected = JSON.parse(b.selected_services || '[]');
+  } catch (e) {
+    selected = [];
+  }
+
+  // Build the detailed message
+  let message = `📋 <b>Booking Confirmation - Krem Chympe Adventure & Camping</b>\n\n`;
+  message += `👤 Name: ${b.visitor_name || '?'}\n`;
+  message += `📱 WhatsApp: ${b.visitor_phone || '?'}\n`;
+  message += `📧 Email: ${b.visitor_email || '?'}\n`;
+  message += `👥 Number of Persons: ${b.participants}\n`;
+  message += `📅 Tour Date: ${b.visit_date}\n\n`;
+
+  // Group services
+  const adventureServices = [];
+  const campingServices = [];
+  const extraFoodServices = [];
+  let lunchPackSelected = false;
+
+  selected.forEach(sel => {
+    const service = serviceMap[sel.serviceId];
+    if (service) {
+      const item = { name: service.name, price: service.price, qty: sel.qty };
+      if (service.name.includes('Lunch') || service.name.includes('Thali')) {
+        if (service.name.includes('Pack') || service.name.includes('packed')) {
+          lunchPackSelected = true;
+        } else {
+          adventureServices.push(item);
+        }
+      } else if (service.name.includes('Tent') || service.name.includes('Camping') || service.name.includes('Overnight')) {
+        campingServices.push(item);
+      } else if (service.name.includes('Bamboo') || service.name.includes('Fish') || service.name.includes('Sabji') || service.name.includes('Egg') || service.name.includes('Chai')) {
+        extraFoodServices.push(item);
+      } else {
+        adventureServices.push(item);
+      }
+    }
+  });
+
+  // Adventure section
+  if (adventureServices.length > 0) {
+    message += `━━━━━━━━━━━━━━\n🏞️ Adventure (Without Camping)\n━━━━━━━━━━━━━━\n\n`;
+    let adventureTotal = 0;
+    adventureServices.forEach(item => {
+      const subtotal = item.price * item.qty;
+      adventureTotal += subtotal;
+      message += `• ${item.name}${item.qty > 1 ? ` x${item.qty}` : ''}: ₹${subtotal}\n`;
+    });
+    message += `\nAdventure Total: ${adventureTotal}\n\n`;
+  }
+
+  // Camping section
+  if (campingServices.length > 0) {
+    message += `━━━━━━━━━━━━━━\n🏕️ Camping\n━━━━━━━━━━━━━━\n\n`;
+    let campingTotal = 0;
+    campingServices.forEach(item => {
+      const subtotal = item.price * item.qty;
+      campingTotal += subtotal;
+      message += `• ${item.name}${item.qty > 1 ? ` x${item.qty}` : ''}: ₹${subtotal}\n`;
+    });
+    message += `\nCamping Total: ${campingTotal}\n\n`;
+  }
+
+  // Extra Food section
+  if (extraFoodServices.length > 0) {
+    message += `━━━━━━━━━━━━━━\n🍽️ Extra Food Orders\n━━━━━━━━━━━━━━\n\n`;
+    let foodTotal = 0;
+    extraFoodServices.forEach(item => {
+      const subtotal = item.price * item.qty;
+      foodTotal += subtotal;
+      message += `• ${item.name}${item.qty > 1 ? ` x${item.qty}` : ''}: ₹${subtotal}\n`;
+    });
+    message += `\nFood Total: ${foodTotal}\n\n`;
+  }
+
+  // Payment section
+  message += `━━━━━━━━━━━━━━\n💳 Payment Summary\n━━━━━━━━━━━━━━\n\n`;
+  message += `Grand Total: ₹${b.final_amount}\n`;
+  message += `Amount Paid: ₹${b.amount_paid_total}\n`;
+  message += `Amount Due: ₹${Math.max(0, b.final_amount - b.amount_paid_total)}\n`;
+  message += `Payment Mode: ${b.payment_status}\n\n`;
+
+  // LUNCH PACK AT THE BOTTOM
+  if (lunchPackSelected) {
+    message += `• Lunch Pack ✔️\n`;
+  }
+
+  return message;
+}
+
 async function showBookingDetail(env, db, chatId, guide, id) {
   const b = await getBookingFull(db, id);
   if (!b || b.guide_id !== guide.id) return sendMessage(env, chatId, 'Booking not found or not assigned to you.', { keyboard: inlineKeyboard([back()]) });
+  
+  // Generate detailed message
+  const detailedText = await generateDetailedBookingMessage(db, b);
+  
   const text =
     `📄 <b>${b.booking_code}</b>\n👤 ${b.visitor_name}\n📦 ${b.package_name || b.package_id}\n⏰ ${b.visit_date}\n👥 ${b.participants} Guests\n` +
     `${b.meeting_point ? `📍 ${b.meeting_point}\n` : ''}💳 Payment: ${b.payment_status}\n${bookingStatusBadge(b.booking_status)} Status: ${b.booking_status}`;
@@ -261,6 +371,7 @@ async function showBookingDetail(env, db, chatId, guide, id) {
   }
   if (['guide_accepted', 'assigned'].includes(b.booking_status)) buttons.push([{ text: '✅ Mark Started', callback_data: `g:started:${id}` }]);
   if (b.booking_status === 'in_progress') buttons.push([{ text: '🏁 Mark Completed', callback_data: `g:completed:${id}` }]);
+  buttons.push([{ text: '📋 Full Details', callback_data: `g:viewfull:${id}` }]);
   buttons.push([{ text: '📞 Contact Customer', callback_data: `g:contact:${id}` }]);
   buttons.push(back());
 
