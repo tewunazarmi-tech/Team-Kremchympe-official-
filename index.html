@@ -147,6 +147,10 @@
     position:relative;
   }
   .highlight-card h3{color:var(--purple-dark);}
+  .compact-card{padding:14px 16px;}
+  .compact-card h3{font-size:15px;margin:0 0 8px;}
+  .receipt-upload-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .receipt-upload-row label{font-size:14px;font-weight:600;color:var(--text);}
   .highlight-badge{
     display:inline-block;
     background:var(--purple);
@@ -199,8 +203,8 @@
 <div class="app">
   <div class="topbar"></div>
   <div class="hero" id="heroCard">
-    <h1 id="secretTrigger">Book Your Krem Chympe Adventure &amp; Camping</h1>
-    <p class="tagline">Fill in your details below to reserve your adventure &amp; camping experience.</p>
+    <h1 id="secretTrigger" data-cms="hero.title">Book Your Krem Chympe Adventure &amp; Camping</h1>
+    <p class="tagline" data-cms="hero.tagline">Fill in your details below to reserve your adventure &amp; camping experience.</p>
     <p class="req-note">* Indicates required question</p>
   </div>
 
@@ -322,7 +326,7 @@
 
       <div class="btn-row">
         <div></div>
-        <button type="button" class="btn btn-primary" onclick="goToStep(2)">Next</button>
+        <button type="button" class="btn btn-primary" onclick="goToStep(isCampingYes() ? 2 : 3)">Next</button>
       </div>
     </section>
 
@@ -398,59 +402,28 @@
 
       <!-- ===== GATEWAY MODE (shown only when the backend reports a verified Razorpay setup) ===== -->
       <div id="gatewayPaymentSection" style="display:none;">
-        <div class="card highlight-card" data-admin-protected="true">
-          <span class="highlight-badge">&#9888; Please don't skip this</span>
-          <h3>Pay via Razorpay &ndash; minimum advance &#8377;500</h3>
-          <p class="note">You can pay the full amount now, or a partial advance (minimum &#8377;500) to secure your booking. Any remaining balance can be settled later.</p>
+        <div class="card highlight-card compact-card" data-admin-protected="true">
+          <h3 data-cms="payment.gateway_heading">Advance payment needed &ndash; &#8377;500 minimum</h3>
           <div class="paid-input-wrap">
             <label class="field-label">Amount to pay now (&#8377;)</label>
             <input type="number" id="advanceAmount" min="500" step="1" value="0" placeholder="Minimum &#8377;500">
           </div>
-          <div class="due-line total">
-            <span>Total Booking Amount</span>
+          <div class="due-line-hidden" style="display:none;">
             <span class="due-value" id="dueTotalLine">&#8377;0</span>
-          </div>
-          <div class="due-line">
-            <span>Paying Now</span>
             <span class="due-value" id="duePaidLine">&#8377;0</span>
-          </div>
-          <div class="due-line total">
-            <span>Amount Due After This Payment</span>
             <span class="due-value" id="dueRemainingLine">&#8377;0</span>
           </div>
           <p class="note" id="paymentStatusNote" style="display:none;"></p>
         </div>
 
         <div class="btn-row">
-          <button type="button" class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+          <button type="button" class="btn btn-secondary" onclick="goToStep(isCampingYes() ? 2 : 1)">Back</button>
           <button type="button" class="btn btn-primary" id="payNowBtn" onclick="payWithRazorpay()">Pay Now with Razorpay</button>
         </div>
       </div>
 
       <!-- ===== MANUAL MODE (shown when no gateway is configured/verified, or as an automatic fallback) ===== -->
       <div id="manualPaymentSection" style="display:none;">
-        <div class="card highlight-card" data-admin-protected="true">
-          <span class="highlight-badge">&#9888; Please don't skip this</span>
-          <h3>Amount to pay now &ndash; minimum advance &#8377;500</h3>
-          <p class="note">You can pay the full amount now, or a partial advance (minimum &#8377;500) to secure your booking. Any remaining balance can be settled later.</p>
-          <div class="paid-input-wrap">
-            <label class="field-label">Amount to pay now (&#8377;)</label>
-            <input type="number" id="manualAdvanceAmount" min="500" step="1" value="0" placeholder="Minimum &#8377;500">
-          </div>
-          <div class="due-line total">
-            <span>Total Booking Amount</span>
-            <span class="due-value" id="manualDueTotalLine">&#8377;0</span>
-          </div>
-          <div class="due-line">
-            <span>Paying Now</span>
-            <span class="due-value" id="manualDuePaidLine">&#8377;0</span>
-          </div>
-          <div class="due-line total">
-            <span>Amount Due After This Payment</span>
-            <span class="due-value" id="manualDueRemainingLine">&#8377;0</span>
-          </div>
-        </div>
-
         <div class="card payment-mode-select">
           <h3>Payment method</h3>
           <label class="radio-row"><input type="radio" name="paymentMode" value="upi" checked> UPI ID</label>
@@ -504,16 +477,31 @@
         </div>
       </div>
 
-        <div class="card highlight-card" data-admin-protected="true">
-          <span class="highlight-badge">&#9888; Please don't skip this</span>
-          <h3>Upload your payment receipt</h3>
-          <p class="note">Pay the amount you entered above using the details shown, then upload a screenshot/photo of your payment confirmation. Your booking will be marked <b>pending</b> until our team verifies it &mdash; you'll be contacted to confirm.</p>
-          <input type="file" id="receiptFile" accept="image/*,.pdf" style="margin-top:8px;">
+        <div class="card highlight-card compact-card" data-admin-protected="true">
+          <h3 data-cms="payment.advance_heading">Advance payment needed &ndash; &#8377;500 minimum</h3>
+          <div class="paid-input-wrap">
+            <label class="field-label">Amount to pay now (&#8377;)</label>
+            <input type="number" id="manualAdvanceAmount" min="500" step="1" value="0" placeholder="Minimum &#8377;500">
+          </div>
+          <div class="due-line-hidden" style="display:none;">
+            <span class="due-value" id="manualDueTotalLine">&#8377;0</span>
+            <span class="due-value" id="manualDuePaidLine">&#8377;0</span>
+            <span class="due-value" id="manualDueRemainingLine">&#8377;0</span>
+          </div>
+        </div>
+
+        <div class="card highlight-card compact-card" data-admin-protected="true">
+          <div class="receipt-upload-row">
+            <label for="receiptFile" data-cms="payment.receipt_label">&#128206; Upload Receipt</label>
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('receiptFile').click()">Choose File</button>
+            <input type="file" id="receiptFile" accept="image/*,.pdf" style="display:none;" onchange="document.getElementById('receiptFileName').textContent = this.files[0] ? this.files[0].name : '';">
+          </div>
+          <p class="note" id="receiptFileName" style="margin-top:4px;"></p>
           <p class="note" id="manualStatusNote" style="display:none;"></p>
         </div>
 
         <div class="btn-row">
-          <button type="button" class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+          <button type="button" class="btn btn-secondary" onclick="goToStep(isCampingYes() ? 2 : 1)">Back</button>
           <button type="button" class="btn btn-primary" id="manualSubmitBtn" onclick="submitManualBooking()">Submit Booking</button>
         </div>
       </div>
@@ -522,10 +510,28 @@
     <!-- STEP 4: THANK YOU -->
     <section class="step" id="step4">
       <div class="card thankyou-card">
-        <h1 style="font-size:24px;">Enjoy your Adventure With Us</h1>
-        <p>Thank you for your booking!</p>
-        <p id="thankyouStatusMsg">Your payment was received via Razorpay and your booking is confirmed. You'll hear from your assigned guide shortly.</p>
-        <a href="#" id="whatsappLink" class="whatsapp-btn" target="_blank" rel="noopener">&#128222; Send Booking Details on WhatsApp</a>
+
+        <!-- Normal / pending state -->
+        <div id="thankyouNormalPanel">
+          <h1 style="font-size:24px;" data-cms="thankyou.heading">Enjoy your Adventure With Us</h1>
+          <p data-cms="thankyou.intro">Thank you for your booking!</p>
+          <p id="thankyouStatusMsg">Your payment was received via Razorpay and your booking is confirmed. You'll hear from your assigned guide shortly.</p>
+
+          <div id="pendingCountdownWrap" style="display:none; margin:16px 0;">
+            <p class="note" style="margin-bottom:6px;">Waiting for confirmation&hellip;</p>
+            <div id="pendingCountdownNum" style="font-size:36px; font-weight:800; color:var(--purple-dark); line-height:1;">1</div>
+          </div>
+
+          <a href="#" id="whatsappLink" class="whatsapp-btn" target="_blank" rel="noopener" data-cms="thankyou.whatsapp_label">&#128222; Tap to Chat with Your Guide</a>
+        </div>
+
+        <!-- Auto-shown after 10s with no admin response, or on rejection -->
+        <div id="noResponsePanel" style="display:none;">
+          <h1 id="noResponseHeading" style="font-size:22px;">We haven't heard back yet</h1>
+          <p id="noResponseText" class="note">Our team usually confirms bookings within moments, but nobody has responded yet. No worries — tap below and we'll sort it out on WhatsApp right away.</p>
+          <a href="#" id="adminWhatsappLink" class="whatsapp-btn" target="_blank" rel="noopener">&#128222; Tap to Chat with Admin</a>
+        </div>
+
         <span class="link-line" onclick="goToStep(1)">Edit your response</span>
         <span class="link-line" onclick="resetForm()">Submit another response</span>
       </div>
@@ -730,6 +736,7 @@ function recalc(){
 }
 
 function goToStep(n){
+  if(n!==4) stopBookingStatusWatch();
   if(n===2){
     if(!document.getElementById('fullName')?.value.trim()){
       alert('Please enter your Full Name.');
@@ -760,7 +767,10 @@ function goToStep(n){
     applyPaymentMode();
   }
   recalc();
-  if(n===4) buildWhatsappLink();
+  if(n===4){
+    buildWhatsappLink();
+    startBookingStatusWatch();
+  }
   window.scrollTo(0,0);
 }
 
@@ -1061,129 +1071,178 @@ document.querySelectorAll('input[name="paymentMode"]').forEach(r=>{
   });
 });
 
-function buildWhatsappLink(){
+async function buildWhatsappLink(){
   const name = document.getElementById('fullName')?.value.trim() || 'N/A';
-  const wa = document.getElementById('whatsappNumber')?.value.trim() || 'N/A';
-  const email = document.getElementById('emailId')?.value.trim() || 'N/A';
   const persons = document.getElementById('numPersons')?.value || '1';
   const date = document.getElementById('tourDate')?.value || 'N/A';
   const bookingCode = window.lastBookingCode || 'N/A';
-  const razorpayPaymentId = window.lastRazorpayPaymentId || 'N/A';
+  const linkEl = document.getElementById('whatsappLink');
 
-  let adventure = [];
-let camping = [];
-let food = [];
+  // Default (fallback) message + number, used until/unless a guide is
+  // already assigned by the time this page loads.
+  let phone = '919863657412';
+  let label = '\u{1F4DE} Tap to Chat with Us';
+  let msg = `Hi! I just booked with Krem Chympe.\nName: ${name}\nBooking Code: ${bookingCode}\nDate: ${date}\nPersons: ${persons}\nLooking forward to my trip!`;
 
-let adventureTotal = 0;
-let campingTotal = 0;
-let foodTotal = 0;
-
-(window.lastLines || []).forEach(l => {
-
-    if (
-        l.label.includes("Local Guide") ||
-        l.label.includes("4x4") ||
-        l.label.includes("Adventure") ||
-        l.label.includes("Veg Thali") ||
-        l.label.includes("Chicken Thali") ||
-        l.label.includes("Pork Thali")
-    ) {
-        adventure.push(`• ${l.label}: ${fmt(l.amt)}`);
-        adventureTotal += l.amt;
+  if(bookingCode !== 'N/A' && !BACKEND_URL.includes('YOUR-WORKER-SUBDOMAIN')){
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/booking-contact?code=${encodeURIComponent(bookingCode)}`);
+      const data = await res.json();
+      if(data && data.guidePhone){
+        phone = data.guidePhone.replace(/[^0-9]/g, '');
+        label = '\u{1F4DE} Tap to Chat with Your Guide';
+        msg = `Hi ${data.guideName || ''}! I'm ${name}, booking ${bookingCode} for ${data.packageName || 'my tour'} on ${data.visitDate || date} (${persons} person(s)). Looking forward to it!`;
+      }
+    } catch(err){
+      console.error('Could not fetch guide contact, using default WhatsApp number:', err);
     }
+  }
 
-    else if (
-        l.label.includes("Camping") ||
-        l.label.includes("Overnight Guide")
-    ) {
-        camping.push(`• ${l.label}: ${fmt(l.amt)}`);
-        campingTotal += l.amt;
-    }
-
-    else {
-        food.push(`• ${l.label}: ${fmt(l.amt)}`);
-        foodTotal += l.amt;
-    }
-
-});
-
-let msg = `Booking Confirmation - Krem Chympe Adventure & Camping
-
-`;
-
-msg += `Name: ${name}
-`;
-msg += `WhatsApp: ${wa}
-`;
-msg += `Email: ${email}
-`;
-msg += `Number of Persons: ${persons}
-`;
-msg += `Tour Date: ${date}
-
-`;
-
-msg += `━━━━━━━━━━━━━━
-🏞️ Adventure (Without Camping)
-━━━━━━━━━━━━━━
-
-`;
-msg += adventure.join('\n');
-msg += `
-
-Adventure Total: ${fmt(adventureTotal)}
-
-`;
-
-msg += `━━━━━━━━━━━━━━
-🏕️ Camping
-━━━━━━━━━━━━━━
-
-`;
-msg += camping.join('\n');
-msg += `
-
-Camping Total: ${fmt(campingTotal)}
-
-`;
-
-msg += `━━━━━━━━━━━━━━
-🍽️ Extra Food Orders
-━━━━━━━━━━━━━━
-
-`;
-msg += food.join('\n');
-msg += `
-
-Food Total: ${fmt(foodTotal)}
-
-`;
-
-msg += `━━━━━━━━━━━━━━
-💳 Payment Summary
-━━━━━━━━━━━━━━
-
-`;
-
-msg += `Grand Total: ${fmt(window.lastTotal||0)}
-`;
-msg += `Amount Paid: ${fmt(window.lastPaid||0)}
-`;
-msg += `Amount Due: ${fmt(Math.max(window.lastDue||0,0))}
-`;
-msg += `Payment: Razorpay (Payment ID ${razorpayPaymentId})
-`;
-msg += `Booking Code: ${bookingCode}
-
-`;
-
-msg += `This is a copy of my booking for your records.`;
-
-  const url = `https://wa.me/919863657412?text=${encodeURIComponent(msg)}`;
-  document.getElementById('whatsappLink').setAttribute('href', url);
+  linkEl.textContent = label;
+  linkEl.setAttribute('href', `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`);
 }
 
+// ===== Live status watcher for the thank-you screen =====
+// Shows a 1→10 countdown while a manual receipt is awaiting admin
+// confirm/reject. Polls every second; if the admin acts before 10s, the
+// normal panel updates in place. If 10s pass with no response, the screen
+// auto-swaps to a dedicated "no response yet" panel with a WhatsApp button
+// straight to admin. An explicit rejection swaps to the same panel early
+// with rejection-specific wording.
+let _statusWatchTimer = null;
+
+function stopBookingStatusWatch(){
+  if(_statusWatchTimer) clearInterval(_statusWatchTimer);
+  _statusWatchTimer = null;
+}
+
+function buildAdminChatLink(extraMsg){
+  const name = document.getElementById('fullName')?.value.trim() || 'N/A';
+  const bookingCode = window.lastBookingCode || 'N/A';
+  const msg = extraMsg || `Hi! I booked with Krem Chympe (Booking ${bookingCode}, ${name}) and my payment is still awaiting confirmation. Could you please check on it?`;
+  document.getElementById('adminWhatsappLink').setAttribute('href', `https://wa.me/919863657412?text=${encodeURIComponent(msg)}`);
+}
+
+function showNoResponsePanel(reason){
+  document.getElementById('thankyouNormalPanel').style.display = 'none';
+  document.getElementById('noResponsePanel').style.display = '';
+  const name = document.getElementById('fullName')?.value.trim() || 'N/A';
+  const bookingCode = window.lastBookingCode || 'N/A';
+  if(reason === 'rejected'){
+    document.getElementById('noResponseHeading').textContent = "We couldn't verify your payment";
+    document.getElementById('noResponseText').textContent = 'Something didn\'t match on our end. No worries — tap below and we\'ll sort it out on WhatsApp right away.';
+    buildAdminChatLink(`Hi! I booked with Krem Chympe (Booking ${bookingCode}, ${name}) — I was told my payment couldn't be verified. Can you help me sort this out?`);
+  } else {
+    document.getElementById('noResponseHeading').textContent = "We haven't heard back yet";
+    document.getElementById('noResponseText').textContent = "Our team usually confirms bookings within moments, but nobody has responded yet. No worries — tap below and we'll sort it out on WhatsApp right away.";
+    buildAdminChatLink();
+  }
+}
+
+async function startBookingStatusWatch(){
+  stopBookingStatusWatch();
+  const bookingCode = window.lastBookingCode;
+
+  document.getElementById('thankyouNormalPanel').style.display = '';
+  document.getElementById('noResponsePanel').style.display = 'none';
+  document.getElementById('pendingCountdownWrap').style.display = 'none';
+
+  if(!bookingCode || BACKEND_URL.includes('YOUR-WORKER-SUBDOMAIN')) return;
+
+  let resolved = false;
+  let secondsElapsed = 0;
+
+  const checkStatus = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/booking-status?code=${encodeURIComponent(bookingCode)}`);
+      const data = await res.json();
+      if(!data || data.error) return null;
+      return data;
+    } catch(err){
+      console.error('Status check failed:', err);
+      return null;
+    }
+  };
+
+  // One immediate check — gateway payments are usually already verified by
+  // the time this screen shows, so there's no need to display a countdown
+  // for those at all.
+  const first = await checkStatus();
+  if(first && first.paymentStatus === 'verified'){
+    document.getElementById('thankyouStatusMsg').textContent =
+      "Your payment has been confirmed and your booking is verified! You'll hear from your assigned guide shortly.";
+    buildWhatsappLink();
+    return;
+  }
+  if(first && (first.paymentStatus === 'rejected' || first.bookingStatus === 'rejected')){
+    showNoResponsePanel('rejected');
+    return;
+  }
+
+  // Still pending — show the 1→10 countdown and keep polling every second.
+  document.getElementById('pendingCountdownWrap').style.display = '';
+  secondsElapsed = 1;
+  document.getElementById('pendingCountdownNum').textContent = '1';
+
+  _statusWatchTimer = setInterval(async () => {
+    secondsElapsed++;
+    document.getElementById('pendingCountdownNum').textContent = String(Math.min(secondsElapsed, 10));
+
+    const data = await checkStatus();
+    if(data && data.paymentStatus === 'verified'){
+      resolved = true;
+      stopBookingStatusWatch();
+      document.getElementById('pendingCountdownWrap').style.display = 'none';
+      document.getElementById('thankyouStatusMsg').textContent =
+        "Your payment has been confirmed and your booking is verified! You'll hear from your assigned guide shortly.";
+      buildWhatsappLink();
+      return;
+    }
+    if(data && (data.paymentStatus === 'rejected' || data.bookingStatus === 'rejected')){
+      resolved = true;
+      stopBookingStatusWatch();
+      showNoResponsePanel('rejected');
+      return;
+    }
+    if(!resolved && secondsElapsed >= 10){
+      resolved = true;
+      stopBookingStatusWatch();
+      showNoResponsePanel('timeout');
+    }
+  }, 1000);
+}
+
+// ===== Admin-editable content (wired to the Telegram admin bot's 🌐 Website menu) =====
+// Any element tagged data-cms="section.key" gets its text replaced by the
+// matching row from /api/website — so an admin editing that section/key via
+// the bot updates this text live, with no code changes. Same pattern (a new
+// data-cms-img="section.key" attribute + a src assignment below) extends to
+// images stored with content_type 'image'.
+async function loadCmsContent(){
+  if(BACKEND_URL.includes('YOUR-WORKER-SUBDOMAIN')) return;
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/website`);
+    const data = await res.json();
+    if(data.siteEnabled === false){
+      document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;">This site is temporarily unavailable. Please check back soon.</div>';
+      return;
+    }
+    (data.content || []).forEach(item => {
+      const key = `${item.section}.${item.key}`;
+      if(item.content_type === 'image'){
+        document.querySelectorAll(`[data-cms-img="${key}"]`).forEach(el => { el.src = item.value; });
+      } else {
+        document.querySelectorAll(`[data-cms="${key}"]`).forEach(el => { el.textContent = item.value; });
+      }
+    });
+  } catch(err){
+    console.error('Could not load admin-editable content, using page defaults:', err);
+  }
+}
+loadCmsContent();
+
 function resetForm(){
+  stopBookingStatusWatch();
   document.getElementById('bookingForm').reset();
   counters = { lunchVeg:0, lunchChicken:0, lunchPork:0, tent:0 };
   PRICES.bamboo.forEach(item => counters['bamboo_'+item.id] = 0);
